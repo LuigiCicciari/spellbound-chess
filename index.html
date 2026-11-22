@@ -24,6 +24,7 @@
       <section class="board-col" aria-label="Board">
         <div class="tray" id="trayTop" aria-label="Pieces taken"></div>
         <div class="board-wrap">
+          <div id="board3d" class="board board3d" hidden></div>
           <svg id="board" class="board" role="img" aria-label="Chess board"></svg>
           <button class="hint-btn" id="hintBtn" title="What do real players play here?" hidden>✦ Hint</button>
           <div class="hint-panel" id="hintPanel" hidden></div>
@@ -81,6 +82,10 @@
             <button id="drawBtn" class="btn">Draw?</button>
             <button id="resignBtn" class="btn">Resign</button>
             <button id="flipBtn" class="btn" title="Flip board" aria-label="Flip board">⇅</button>
+          </div>
+          <div class="row buttons secondary">
+            <button id="watchBtn" class="btn" title="Watch the computer play itself">▶ Watch</button>
+            <button id="viewBtn" class="btn" title="Switch camera view" hidden>◎ Top view</button>
           </div>
         </section>
 
@@ -167,6 +172,13 @@
   <script src="audio.js"></script>
   <script src="render.js"></script>
   <script src="ladder.js"></script>
-  <script src="main.js"></script>
+  <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+  <script type="module">
+    // Load the 3D board if the browser can; otherwise the flat board is used.
+    try {
+      await Promise.race([import('./render3d.js'), new Promise((_, no) => setTimeout(() => no(new Error('3D load timed out')), 8000))]);
+    } catch (e) { console.warn('Spellbound Chess: 3D board unavailable, using the flat board.', e); }
+    const s = document.createElement('script'); s.src = 'main.js'; document.body.appendChild(s);
+  </script>
 </body>
 </html>

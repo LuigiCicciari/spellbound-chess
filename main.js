@@ -29,7 +29,16 @@
   let gameToken = 0;
 
   const svg = $('board');
-  const R = window.SBRender.create(svg);
+  const webglOK = () => { try { const c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); } catch (e) { return false; } };
+  let R = null;
+  if (window.SBRender3D && webglOK() && !/[?&]flat\b/.test(location.search)) {
+    try { $('board3d').hidden = false; svg.style.display = 'none'; R = window.SBRender3D.create($('board3d')); } catch (e) { R = null; }
+  }
+  if (!R) { $('board3d').hidden = true; svg.style.display = ''; R = window.SBRender.create(svg); }
+  const boardEl = R.el || svg;
+  $('viewBtn').hidden = !R.is3D;
+  document.body.classList.toggle('is3d', !!R.is3D);
+  let watching = false;
 
   /* ---------- engine (Web Worker, with a main-thread fallback) ---------- */
   let worker = null, reqId = 0;
@@ -104,10 +113,10 @@
     $('trayBottom').innerHTML = sortP(takenBy[top === 'w' ? 'b' : 'w']).map(miniPiece).join('');
   }
 
-  function syncBoard() { R.setPosition(game.board); refreshMarks(); renderMoves(); renderTrays(); updateHint(); updateButtons(); }
+  function syncBoard(rebuild) { if (rebuild !== false || !R.is3D) R.setPosition(game.board); refreshMarks(); renderMoves(); renderTrays(); updateHint(); updateButtons(); }
 
   function updateButtons() {
-    const live = phase === 'player' || phase === 'engine';
+    const live = !watching && (phase === 'player' || phase === 'engine');
     $('drawBtn').disabled = !live || game.sanHistory.length < 2;
     $('resignBtn').disabled = !live || game.sanHistory.length < 1;
   }
@@ -118,6 +127,7 @@
     $('resultOverlay').hidden = true; $('promo').hidden = true; $('hintPanel').hidden = true;
     R.setThinking('w', false); R.setThinking('b', false); R.showArrow(-1);
     game = new Game(); lastMove = null; gameOver = null; selected = null; savedThisGame = false; gameStart = Date.now();
+    watching = false; $('watchBtn').textContent = '▶ Watch';
     level = Number($('level').value);
     const c = $('color').value;
     playerColor = c === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : c;
@@ -150,15 +160,18 @@
     if (!played) return false;
     phase = 'animating'; selected = null; updateButtons();
     R.mark({ lastMove: null });
-    if (token === gameToken) await R.animateMove(played);
+    const byPlayer = !watching && colorOf(played.piece) === playerColor;
+    const danger = byPlayer && game.attacked(played.to, game.turn);
+    if (token === gameToken) await R.animateMove(played, { hesitate: danger, celebrate: true });
     if (token !== gameToken) return true;
     lastMove = { from: played.from, to: played.to };
-    syncBoard();
+    syncBoard(false);
     const mover = colorOf(played.piece) === playerColor ? 'You' : 'Stones';
     const st = game.status();
     if (st) { await endGame(st.result, st.reason); return true; }
-    if (game.inCheck()) { R.pulseCheck(); }
-    if (game.turn === playerColor) { phase = 'player'; setStatus(game.inCheck() ? 'Check! Your move' : `${mover === 'Stones' ? 'Stones played ' + played.san + ' · ' : ''}Your move`, game.inCheck()); }
+    if (game.inCheck()) { R.pulseCheck(); if (R.checkGuard) R.checkGuard(game.kingSquare(game.turn)); }
+    if (watching) { setStatus(`Watching · ${colorOf(played.piece) === 'w' ? 'Moonstone' : 'Obsidian'} played ${played.san}`); engineTurn(); }
+    else if (game.turn === playerColor) { phase = 'player'; setStatus(game.inCheck() ? 'Check! Your move' : `${mover === 'Stones' ? 'Stones played ' + played.san + ' · ' : ''}Your move`, game.inCheck()); }
     else { engineTurn(); }
     updateButtons();
     return true;
@@ -173,11 +186,18 @@
     if (reason === 'checkmate') {
       const loser = result === '1-0' ? 'b' : 'w';
       setStatus('Checkmate');
-      await R.topple(game.kingSquare(loser));
+      await (R.surrender || R.topple)(game.kingSquare(loser));
     } else if (draw) {
       setStatus('Draw');
       await R.bow([game.kingSquare('w'), game.kingSquare('b')]);
     } else setStatus(playerWon ? 'You win' : 'You resigned');
+    if (watching) {
+      const token = gameToken;
+      setStatus(`${draw ? 'Draw' : (result === '1-0' ? 'Moonstone' : 'Obsidian') + ' wins'} ${REASONS[reason] || ''} · next battle soon…`);
+      await wait(4500);
+      if (watching && token === gameToken) startWatch();
+      return;
+    }
     if (playerWon) window.SBAudio.play('chime');
     showResult();
   }
@@ -260,7 +280,7 @@
     const ms = legalFrom(sq);
     refreshMarks({ selected: sq, targets: [...new Set(ms.map((m) => m.to))], captures: ms.filter((m) => m.captured).map((m) => m.to) });
   }
-  function clearSelection() { selected = null; refreshMarks(); }
+  function clearSelection() { selected = null; if (R.relax) R.relax(); refreshMarks(); }
 
   async function tryMove(from, to) {
     const options = game.legalMoves().filter((m) => m.from === from && m.to === to);
@@ -287,7 +307,7 @@
     });
   }
 
-  svg.addEventListener('pointerdown', (ev) => {
+  boardEl.addEventListener('pointerdown', (ev) => {
     window.SBAudio.unlock();
     if (phase !== 'player') return;
     const sq = R.squareFromEvent(ev); if (sq < 0) return;
@@ -296,18 +316,18 @@
       const from = selected; tryMove(from, sq); return;
     }
     if (p && colorOf(p) === playerColor) {
-      svg.setPointerCapture(ev.pointerId);
+      boardEl.setPointerCapture(ev.pointerId);
       pointerDownSq = sq; dragStarted = false; downPos = { x: ev.clientX, y: ev.clientY };
       if (selected !== sq) { showSelection(sq); window.SBAudio.play('tap'); }
       R.lift(sq, true);
     } else clearSelection();
   });
-  svg.addEventListener('pointermove', (ev) => {
+  boardEl.addEventListener('pointermove', (ev) => {
     if (pointerDownSq === null) return;
     if (!dragStarted && downPos && Math.hypot(ev.clientX - downPos.x, ev.clientY - downPos.y) > 6) { dragStarted = true; R.startDrag(pointerDownSq, ev); }
     if (dragStarted) R.moveDrag(ev);
   });
-  svg.addEventListener('pointerup', async (ev) => {
+  boardEl.addEventListener('pointerup', async (ev) => {
     if (pointerDownSq === null) return;
     const from = pointerDownSq; pointerDownSq = null;
     R.lift(from, false);
@@ -317,7 +337,7 @@
     R.endDrag(true);
     if (to >= 0 && to !== from && legalFrom(from).some((m) => m.to === to)) await tryMove(from, to);
   });
-  svg.addEventListener('pointercancel', () => { if (pointerDownSq !== null) { R.lift(pointerDownSq, false); R.endDrag(true); pointerDownSq = null; dragStarted = false; } });
+  boardEl.addEventListener('pointercancel', () => { if (pointerDownSq !== null) { R.lift(pointerDownSq, false); R.endDrag(true); pointerDownSq = null; dragStarted = false; } });
 
   $('typeForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -333,6 +353,7 @@
 
   /* ---------- buttons ---------- */
   $('newBtn').onclick = async () => {
+    if (watching) { newGame(); return; }
     if ((phase === 'player' || phase === 'engine') && game.sanHistory.length > 1) {
       const ok = await confirmBox('Abandon this game?', 'It counts as a resignation if you save it.');
       if (!ok) return;
@@ -355,6 +376,19 @@
     if (game.sanHistory.length >= 40 && Math.abs(value) <= 50) await endGame('1/2-1/2', 'draw_agreed');
     else toast(game.sanHistory.length < 40 ? 'The stones refuse: too early for peace (after move 20).' : 'The stones refuse your draw.');
   };
+  function startWatch() {
+    gameToken++;
+    $('resultOverlay').hidden = true; $('promo').hidden = true; $('hintPanel').hidden = true;
+    game = new Game(); lastMove = null; gameOver = null; selected = null;
+    watching = true; playerColor = null; level = Number($('level').value);
+    $('watchBtn').textContent = '■ Stop';
+    R.setOrientation(R.orientation || 'w', game.board);
+    syncBoard();
+    setStatus('Watching the stones battle…');
+    engineTurn();
+  }
+  $('watchBtn').onclick = () => { if (watching) newGame(); else startWatch(); };
+  $('viewBtn').onclick = () => { if (!R.setView) return; R.setView(R.view === 'battle' ? 'overhead' : 'battle'); $('viewBtn').textContent = R.view === 'battle' ? '◎ Top view' : '◈ Battle view'; };
   $('flipBtn').onclick = () => { R.setOrientation(R.orientation === 'w' ? 'b' : 'w', game.board); refreshMarks(); renderTrays(); };
   $('level').value = String(settings.level); $('color').value = settings.color;
   $('level').onchange = () => { settings.level = Number($('level').value); saveSettings(); if (phase === 'player' && game.sanHistory.length < 1) level = settings.level; toast('New level applies to your next game.'); };

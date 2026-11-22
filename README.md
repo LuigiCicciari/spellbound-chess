@@ -8,6 +8,9 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 
 ## Features
 
+- A 3D stone battlefield: original carved warriors that march, fight and shatter (flat 2D board as an automatic fallback; add `?flat` to the address to force it)
+- Personality: pieces stand to attention, hesitate when sent into danger, celebrate captures, and the king kneels in surrender
+- ▶ Watch mode: the computer plays itself so you can enjoy the battles without playing
 - Four computer levels: Apprentice (600), Adept (1000), Master (1400), Archmage (1800)
 - Click, drag, or type moves (`Nf3`, `e2e4`)
 - Animated moves, captures, promotions, castling and checkmate, with synthesized stone sound effects
@@ -34,7 +37,8 @@ Ratings are never trusted from the browser. The ladder replays every saved game'
 | `index.html`, `style.css` | Page layout and dark stone theme |
 | `rules.js` | Chess rules: legal moves, check, castling, en passant, promotion, draws |
 | `engine.js`, `engine.worker.js` | Computer opponent (alpha-beta search), run off the main thread |
-| `render.js` | SVG board, original piece drawings, and all animation |
+| `render3d.js` | 3D board, original stone warriors and battle animation ([three.js](https://threejs.org), MIT, loaded from jsDelivr) |
+| `render.js` | Flat SVG board, used when 3D isn't available |
 | `audio.js` | Sound effects made with WebAudio (no audio files) |
 | `ladder.js` | Saving games, verification, Elo, and the ladder |
 | `main.js` | Game flow and controls |
