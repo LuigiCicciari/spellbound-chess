@@ -181,3 +181,12 @@ body.is3d .board-wrap { width: 100%; aspect-ratio: auto; flex: 1; min-height: 0;
 body.is3d .tray, body.is3d .statusline { width: 100%; }
 body.is3d .board { border-radius: 8px; }
 @media (max-width: 900px) { body.is3d .board-wrap { height: 70vh; flex: none; } }
+
+.piece-tip { position: absolute; pointer-events: none; background: rgba(27,28,34,.92); border: 1px solid var(--line); color: var(--text); padding: 3px 9px; border-radius: 6px; font-size: 12px; white-space: nowrap; z-index: 3; }
+/* 3D: captured pieces float over the board instead of taking rows of space */
+body.is3d .board-col { position: relative; }
+body.is3d .tray { position: absolute; left: 14px; width: auto; z-index: 2; background: rgba(27,28,34,.55); border-radius: 8px; padding: 0 6px; }
+body.is3d .tray:empty { display: none; }
+body.is3d #trayTop { top: 10px; }
+body.is3d #trayBottom { bottom: 50px; }
+body.is3d .stage { padding: 8px 16px; gap: 12px; }

@@ -322,7 +322,21 @@
       R.lift(sq, true);
     } else clearSelection();
   });
+  const NAMES = { P: 'Pawn', N: 'Knight', B: 'Bishop', R: 'Rook', Q: 'Queen', K: 'King' };
+  function showTip(ev) {
+    const tip = $('pieceTip');
+    const sq = R.squareFromEvent(ev);
+    const p = sq >= 0 ? game.board[sq] : null;
+    if (!p || pointerDownSq !== null) { tip.hidden = true; return; }
+    const side = colorOf(p) === 'w' ? 'White' : 'Black';
+    tip.textContent = `${side} ${NAMES[typeOf(p)]} · ${window.SBRules.sqName(sq)}`;
+    const box = $('pieceTip').parentElement.getBoundingClientRect();
+    tip.style.left = `${ev.clientX - box.left + 14}px`; tip.style.top = `${ev.clientY - box.top + 14}px`;
+    tip.hidden = false;
+  }
+  boardEl.addEventListener('pointerleave', () => { $('pieceTip').hidden = true; });
   boardEl.addEventListener('pointermove', (ev) => {
+    if (ev.pointerType !== 'touch') showTip(ev);
     if (pointerDownSq === null) return;
     if (!dragStarted && downPos && Math.hypot(ev.clientX - downPos.x, ev.clientY - downPos.y) > 6) { dragStarted = true; R.startDrag(pointerDownSq, ev); }
     if (dragStarted) R.moveDrag(ev);

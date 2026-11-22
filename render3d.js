@@ -55,7 +55,7 @@ function makeMaterials() {
   const moon = new THREE.MeshStandardMaterial({ color: 0xE8E2D4, roughness: 0.82, metalness: 0.02, flatShading: true, map: stoneTexture('#e8e2d4', 'rgba(120,110,95,0.35)', 7) });
   const obsidian = new THREE.MeshStandardMaterial({ color: 0x5a5866, roughness: 0.4, metalness: 0.1, flatShading: true, map: stoneTexture('#c8c6d0', 'rgba(40,40,55,0.4)', 13) });
   return {
-    w: { stone: moon, trim: new THREE.MeshStandardMaterial({ color: 0xc9c1ae, roughness: 0.9, flatShading: true }),
+    w: { stone: moon, trim: new THREE.MeshStandardMaterial({ color: 0xb0a387, roughness: 0.9, flatShading: true }),
       rune: new THREE.MeshStandardMaterial({ color: 0x7FB8D8, emissive: 0x7FB8D8, emissiveIntensity: 2.2 }), dark: new THREE.MeshBasicMaterial({ color: 0x15151a }) },
     b: { stone: obsidian, trim: new THREE.MeshStandardMaterial({ color: 0x3a3944, roughness: 0.5, metalness: 0.2, flatShading: true }),
       rune: new THREE.MeshStandardMaterial({ color: 0xF28E2B, emissive: 0xF28E2B, emissiveIntensity: 2.2 }), dark: new THREE.MeshBasicMaterial({ color: 0x050507 }) },
@@ -80,102 +80,111 @@ function buildPiece(type, side, MAT) {
   const bob = new THREE.Group();      // idle breathing only
   const body = new THREE.Group();     // lean, hop, kneel (actions)
   root.add(bob); bob.add(body);
-  mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.1, 10), M.trim, 0, 0.05, 0, body);
+  body.scale.setScalar(1.12);
+  // every piece stands on a two-step plinth with a trim band, like a classic chessman
+  mesh(new THREE.CylinderGeometry(0.29, 0.33, 0.07, 14), M.trim, 0, 0.035, 0, body);
+  mesh(new THREE.CylinderGeometry(0.25, 0.29, 0.05, 14), M.stone, 0, 0.095, 0, body);
   let weapon = pivot(body, 0, 0.5, 0), head = null, height = 0.8;
+  const ring = (r, y, t) => { const m = mesh(new THREE.TorusGeometry(r, t || 0.022, 6, 16), M.trim, 0, y, 0, body); m.rotation.x = Math.PI / 2; return m; };
   switch (type) {
-    case 'P': { // armored foot soldier with round shield and club
-      height = 0.72;
-      mesh(lathe([[0, 0.1], [0.22, 0.1], [0.19, 0.3], [0.16, 0.4], [0.2, 0.44], [0.12, 0.48], [0, 0.48]]), M.stone, 0, 0, 0, body);
-      head = pivot(body, 0, 0.58, 0);
-      mesh(new THREE.SphereGeometry(0.12, 9, 7), M.stone, 0, 0, 0, head);
-      mesh(new THREE.SphereGeometry(0.135, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2), M.trim, 0, 0.01, 0, head);
-      mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 10), M.trim, 0, 0.01, 0, head);
-      eyes(M, head, -0.01, 0.11, 0.042);
-      const shield = mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.035, 10), M.trim, -0.17, 0.32, 0.13, body); shield.rotation.x = Math.PI / 2;
-      mesh(new THREE.SphereGeometry(0.035, 6, 4), M.stone, -0.17, 0.32, 0.155, body);
-      weapon = pivot(body, 0.19, 0.42, 0);
-      mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.3, 6), M.trim, 0, -0.1, 0.1, weapon).rotation.x = 0.9;
-      mesh(new THREE.DodecahedronGeometry(0.055), M.stone, 0, 0.0, 0.2, weapon);
+    case 'P': { // small foot soldier: classic round head on a collar, cap, little shield and club
+      height = 0.62;
+      mesh(lathe([[0, 0.12], [0.18, 0.12], [0.15, 0.22], [0.1, 0.34], [0, 0.36]], 12), M.stone, 0, 0, 0, body);
+      mesh(new THREE.CylinderGeometry(0.14, 0.12, 0.04, 12), M.trim, 0, 0.36, 0, body);
+      head = pivot(body, 0, 0.47, 0);
+      mesh(new THREE.SphereGeometry(0.11, 12, 9), M.stone, 0, 0, 0, head);
+      mesh(new THREE.SphereGeometry(0.118, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2.4), M.trim, 0, 0.012, 0, head);
+      mesh(new THREE.BoxGeometry(0.025, 0.07, 0.03), M.trim, 0, -0.01, 0.105, head);
+      eyes(M, head, 0.0, 0.098, 0.042, 0.02);
+      const shield = mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 12), M.trim, -0.15, 0.24, 0.1, body); shield.rotation.x = Math.PI / 2;
+      weapon = pivot(body, 0.16, 0.32, 0.02);
+      mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.24, 6), M.trim, 0, -0.06, 0.08, weapon).rotation.x = 0.9;
+      mesh(new THREE.DodecahedronGeometry(0.045), M.stone, 0, 0.0, 0.16, weapon);
       break;
     }
-    case 'R': { // hulking stone guardian with a tower shield
-      height = 0.98;
-      mesh(new THREE.BoxGeometry(0.46, 0.42, 0.36), M.stone, 0, 0.31, 0, body);
-      mesh(new THREE.BoxGeometry(0.6, 0.13, 0.36), M.trim, 0, 0.58, 0, body);
-      head = pivot(body, 0, 0.76, 0);
-      mesh(new THREE.BoxGeometry(0.26, 0.22, 0.24), M.stone, 0, 0, 0, head);
-      for (const [x, z] of [[-0.09, -0.08], [0.09, -0.08], [-0.09, 0.08], [0.09, 0.08]]) mesh(new THREE.BoxGeometry(0.07, 0.08, 0.07), M.trim, x, 0.15, z, head);
-      mesh(new THREE.BoxGeometry(0.2, 0.035, 0.02), M.dark, 0, 0.01, 0.121, head);
-      eyes(M, head, 0.01, 0.125, 0.055, 0.02);
-      for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.12, 0.34, 0.14), M.stone, sx * 0.33, 0.38, 0, body);
-      weapon = pivot(body, -0.2, 0.42, 0.22);
-      mesh(new THREE.BoxGeometry(0.34, 0.5, 0.06), M.trim, 0, 0, 0, weapon);
-      mesh(new THREE.BoxGeometry(0.08, 0.08, 0.03), M.rune, 0, 0.08, 0.04, weapon).castShadow = false;
+    case 'R': { // a living castle tower: battlements on top, arrow-slit eyes, stone fists and a shield
+      height = 0.88;
+      mesh(lathe([[0, 0.12], [0.25, 0.12], [0.22, 0.2], [0.2, 0.62], [0.24, 0.66], [0, 0.66]], 12), M.stone, 0, 0, 0, body);
+      ring(0.215, 0.3, 0.018);
+      mesh(new THREE.CylinderGeometry(0.27, 0.24, 0.12, 12), M.trim, 0, 0.72, 0, body);
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + Math.PI / 6; mesh(new THREE.BoxGeometry(0.09, 0.1, 0.09), M.trim, Math.sin(a) * 0.2, 0.83, Math.cos(a) * 0.2, body).rotation.y = a; }
+      head = pivot(body, 0, 0.52, 0);
+      mesh(new THREE.BoxGeometry(0.2, 0.06, 0.03), M.dark, 0, 0, 0.2, head);
+      eyes(M, head, 0, 0.215, 0.055, 0.022);
+      mesh(new THREE.BoxGeometry(0.04, 0.1, 0.03), M.dark, 0, -0.18, 0.205, head); // door slit
+      mesh(new THREE.DodecahedronGeometry(0.08), M.stone, 0.29, 0.32, 0.05, body);
+      weapon = pivot(body, -0.2, 0.42, 0.2);
+      mesh(new THREE.BoxGeometry(0.24, 0.32, 0.05), M.trim, 0, 0, 0, weapon);
+      mesh(new THREE.BoxGeometry(0.06, 0.06, 0.03), M.rune, 0, 0.05, 0.035, weapon).castShadow = false;
       break;
     }
-    case 'N': { // carved warhorse
+    case 'N': { // warhorse: long head, ears, flowing stone mane
       height = 0.95;
-      mesh(lathe([[0, 0.1], [0.24, 0.1], [0.2, 0.22], [0, 0.24]]), M.trim, 0, 0, 0, body);
-      const neck = mesh(new THREE.BoxGeometry(0.22, 0.55, 0.28), M.stone, 0, 0.45, -0.03, body); neck.rotation.x = -0.28;
-      head = pivot(body, 0, 0.72, 0.08);
-      const skull = mesh(new THREE.BoxGeometry(0.2, 0.18, 0.44), M.stone, 0, 0, 0.1, head); skull.rotation.x = 0.55;
-      mesh(new THREE.BoxGeometry(0.17, 0.1, 0.14), M.trim, 0, -0.13, 0.28, head).rotation.x = 0.55;
+      mesh(lathe([[0, 0.12], [0.22, 0.12], [0.19, 0.22], [0, 0.24]], 12), M.trim, 0, 0, 0, body);
+      const neck = mesh(new THREE.BoxGeometry(0.2, 0.5, 0.26), M.stone, 0, 0.44, -0.04, body); neck.rotation.x = -0.32;
+      const chest = mesh(new THREE.BoxGeometry(0.22, 0.22, 0.2), M.stone, 0, 0.3, 0.06, body); chest.rotation.x = 0.2;
+      head = pivot(body, 0, 0.7, 0.05);
+      const skull = mesh(new THREE.BoxGeometry(0.18, 0.17, 0.4), M.stone, 0, 0, 0.12, head); skull.rotation.x = 0.62;
+      const muzzle = mesh(new THREE.BoxGeometry(0.15, 0.12, 0.14), M.trim, 0, -0.17, 0.27, head); muzzle.rotation.x = 0.62;
+      mesh(new THREE.BoxGeometry(0.04, 0.03, 0.02), M.dark, -0.04, -0.2, 0.34, head); mesh(new THREE.BoxGeometry(0.04, 0.03, 0.02), M.dark, 0.04, -0.2, 0.34, head);
       for (const sx of [-1, 1]) {
-        const ear = mesh(new THREE.ConeGeometry(0.04, 0.13, 4), M.stone, sx * 0.065, 0.14, -0.06, head); ear.rotation.x = -0.3;
-        mesh(new THREE.SphereGeometry(0.024, 8, 6), M.rune, sx * 0.102, 0.02, 0.05, head).castShadow = false;
+        const ear = mesh(new THREE.ConeGeometry(0.035, 0.14, 5), M.stone, sx * 0.06, 0.15, -0.05, head); ear.rotation.x = -0.25; ear.rotation.z = -sx * 0.15;
+        mesh(new THREE.SphereGeometry(0.026, 8, 6), M.rune, sx * 0.095, 0.03, 0.06, head).castShadow = false;
       }
-      for (let i = 0; i < 5; i++) { const fin = mesh(new THREE.BoxGeometry(0.04, 0.1, 0.09), M.trim, 0, 0.3 + i * 0.1, -0.19 + i * 0.03, body); fin.rotation.x = -0.3; }
+      for (let i = 0; i < 6; i++) { const fin = mesh(new THREE.BoxGeometry(0.05, 0.13, 0.08), M.trim, 0, 0.26 + i * 0.09, -0.2 + i * 0.035, body); fin.rotation.x = -0.45; }
       weapon = head;
       break;
     }
-    case 'B': { // hooded mystic with an orb staff
-      height = 1.1;
-      mesh(lathe([[0, 0.1], [0.26, 0.1], [0.2, 0.45], [0.13, 0.74], [0, 0.78]]), M.stone, 0, 0, 0, body);
-      mesh(new THREE.TorusGeometry(0.17, 0.025, 5, 10), M.trim, 0, 0.36, 0, body).rotation.x = Math.PI / 2;
-      head = pivot(body, 0, 0.86, 0);
-      const hood = mesh(new THREE.SphereGeometry(0.15, 9, 8), M.stone, 0, 0, 0, head); hood.scale.set(1, 1.25, 1);
-      mesh(new THREE.ConeGeometry(0.08, 0.16, 6), M.stone, 0, 0.2, -0.04, head).rotation.x = -0.35;
-      mesh(new THREE.CircleGeometry(0.085, 10), M.dark, 0, -0.01, 0.142, head);
-      eyes(M, head, 0.0, 0.15, 0.033, 0.018);
-      weapon = pivot(body, 0.24, 0.66, 0.04);
-      mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.95, 6), M.trim, 0, -0.1, 0, weapon);
-      const orb = mesh(new THREE.IcosahedronGeometry(0.065), M.rune, 0, 0.42, 0, weapon); orb.castShadow = false;
+    case 'B': { // mystic: classic mitre with a slit, orb staff
+      height = 1.12;
+      mesh(lathe([[0, 0.12], [0.22, 0.12], [0.17, 0.3], [0.11, 0.62], [0.15, 0.66], [0, 0.68]], 12), M.stone, 0, 0, 0, body);
+      ring(0.13, 0.66, 0.025);
+      head = pivot(body, 0, 0.7, 0);
+      mesh(lathe([[0, 0], [0.1, 0.02], [0.135, 0.11], [0.12, 0.2], [0.07, 0.29], [0.02, 0.34], [0, 0.35]], 12), M.stone, 0, 0, 0, head);
+      const slit = mesh(new THREE.BoxGeometry(0.02, 0.16, 0.25), M.dark, 0.03, 0.2, 0.02, head); slit.rotation.z = -0.55;
+      mesh(new THREE.SphereGeometry(0.035, 8, 6), M.trim, 0, 0.38, 0, head);
+      eyes(M, head, 0.07, 0.115, 0.036, 0.018);
+      weapon = pivot(body, 0.22, 0.56, 0.04);
+      mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.9, 6), M.trim, 0, -0.1, 0, weapon);
+      mesh(new THREE.IcosahedronGeometry(0.06), M.rune, 0, 0.38, 0, weapon).castShadow = false;
       break;
     }
-    case 'Q': { // crescent-crowned sovereign with a long blade
-      height = 1.22;
-      mesh(lathe([[0, 0.1], [0.3, 0.1], [0.22, 0.38], [0.15, 0.7], [0.19, 0.78], [0, 0.8]]), M.stone, 0, 0, 0, body);
-      for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(0.075, 7, 5), M.trim, sx * 0.17, 0.74, 0, body);
-      head = pivot(body, 0, 0.9, 0);
-      mesh(new THREE.SphereGeometry(0.115, 10, 8), M.stone, 0, 0, 0, head);
-      const crown = mesh(new THREE.TorusGeometry(0.15, 0.024, 5, 12, Math.PI), M.trim, 0, 0.09, -0.03, head); crown.rotation.y = 0;
-      mesh(new THREE.OctahedronGeometry(0.03), M.rune, 0, 0.24, -0.03, head).castShadow = false;
-      eyes(M, head, 0.0, 0.105, 0.04, 0.02);
-      weapon = pivot(body, 0.2, 0.74, 0.02);
-      const blade = mesh(new THREE.BoxGeometry(0.035, 0.62, 0.012), M.trim, 0, 0.35, 0.06, weapon); void blade;
-      mesh(new THREE.BoxGeometry(0.16, 0.03, 0.04), M.stone, 0, 0.04, 0.06, weapon);
-      mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 6), M.stone, 0, -0.03, 0.06, weapon);
+    case 'Q': { // sovereign: tall robe, spiked coronet, long blade
+      height = 1.3;
+      mesh(lathe([[0, 0.12], [0.25, 0.12], [0.2, 0.32], [0.12, 0.72], [0.17, 0.8], [0, 0.82]], 12), M.stone, 0, 0, 0, body);
+      ring(0.16, 0.34, 0.02); ring(0.15, 0.8, 0.025);
+      head = pivot(body, 0, 0.93, 0);
+      mesh(new THREE.SphereGeometry(0.105, 12, 9), M.stone, 0, 0, 0, head);
+      mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.06, 14), M.trim, 0, 0.1, 0, head);
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const sp = mesh(new THREE.ConeGeometry(0.025, 0.1, 5), M.trim, Math.sin(a) * 0.115, 0.17, Math.cos(a) * 0.115, head); sp.rotation.set(Math.cos(a) * 0.35, 0, -Math.sin(a) * 0.35); }
+      mesh(new THREE.SphereGeometry(0.035, 8, 6), M.rune, 0, 0.2, 0, head).castShadow = false;
+      eyes(M, head, 0.0, 0.095, 0.038, 0.019);
+      weapon = pivot(body, 0.19, 0.72, 0.02);
+      mesh(new THREE.BoxGeometry(0.032, 0.58, 0.012), M.trim, 0, 0.33, 0.06, weapon);
+      mesh(new THREE.BoxGeometry(0.15, 0.03, 0.04), M.stone, 0, 0.04, 0.06, weapon);
+      mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.09, 6), M.stone, 0, -0.02, 0.06, weapon);
       weapon.rotation.x = -0.35; weapon.rotation.z = -0.25;
       break;
     }
-    case 'K': { // standing-stone king with a great sword
-      height = 1.38;
-      mesh(lathe([[0, 0.1], [0.32, 0.1], [0.26, 0.42], [0.21, 0.8], [0.27, 0.86], [0, 0.9]]), M.stone, 0, 0, 0, body);
-      mesh(new THREE.TorusGeometry(0.22, 0.03, 5, 10), M.trim, 0, 0.3, 0, body).rotation.x = Math.PI / 2;
-      head = pivot(body, 0, 1.0, 0);
-      mesh(new THREE.BoxGeometry(0.21, 0.21, 0.21), M.stone, 0, 0, 0, head);
-      mesh(new THREE.BoxGeometry(0.23, 0.04, 0.23), M.trim, 0, 0.11, 0, head);
-      for (const [x, h] of [[-0.075, 0.12], [0, 0.2], [0.075, 0.12]]) mesh(new THREE.BoxGeometry(0.05, h, 0.05), M.trim, x, 0.13 + h / 2, 0, head);
-      eyes(M, head, 0.0, 0.106, 0.045, 0.022);
-      weapon = pivot(body, 0, 0.58, 0.26);
-      mesh(new THREE.BoxGeometry(0.05, 0.62, 0.02), M.trim, 0, -0.26, 0, weapon);
-      mesh(new THREE.BoxGeometry(0.24, 0.035, 0.05), M.stone, 0, 0.06, 0, weapon);
-      mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.13, 6), M.stone, 0, 0.14, 0, weapon);
-      mesh(new THREE.DodecahedronGeometry(0.035), M.rune, 0, 0.22, 0, weapon).castShadow = false;
+    case 'K': { // king: tallest, broad robe, crown topped with a stone cross, great sword
+      height = 1.5;
+      mesh(lathe([[0, 0.12], [0.27, 0.12], [0.22, 0.34], [0.14, 0.8], [0.19, 0.88], [0, 0.9]], 12), M.stone, 0, 0, 0, body);
+      ring(0.18, 0.36, 0.022); ring(0.17, 0.88, 0.028);
+      head = pivot(body, 0, 1.01, 0);
+      mesh(new THREE.BoxGeometry(0.19, 0.19, 0.19), M.stone, 0, 0, 0, head);
+      mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.08, 4), M.trim, 0, 0.13, 0, head).rotation.y = Math.PI / 4;
+      mesh(new THREE.BoxGeometry(0.05, 0.24, 0.05), M.trim, 0, 0.3, 0, head);
+      mesh(new THREE.BoxGeometry(0.17, 0.05, 0.05), M.trim, 0, 0.33, 0, head);
+      mesh(new THREE.OctahedronGeometry(0.028), M.rune, 0, 0.33, 0.03, head).castShadow = false;
+      eyes(M, head, 0.0, 0.097, 0.043, 0.021);
+      weapon = pivot(body, 0, 0.58, 0.25);
+      mesh(new THREE.BoxGeometry(0.045, 0.58, 0.02), M.trim, 0, -0.25, 0, weapon);
+      mesh(new THREE.BoxGeometry(0.22, 0.035, 0.05), M.stone, 0, 0.05, 0, weapon);
+      mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.12, 6), M.stone, 0, 0.13, 0, weapon);
       break;
     }
   }
-  root.userData = { type, side, bob, body, head, weapon, height, baseWeaponRot: weapon.rotation.clone(), phase: Math.random() * 10, facing: side === 'w' ? Math.PI : 0 };
+  root.userData = { type, side, bob, body, head, weapon, height: height * 1.12, baseWeaponRot: weapon.rotation.clone(), phase: Math.random() * 10, facing: side === 'w' ? Math.PI : 0 };
   root.rotation.y = root.userData.facing;
   return root;
 }
@@ -204,20 +213,33 @@ export function create(container) {
   scene.add(key);
   const rim = new THREE.DirectionalLight(0x9fd0ee, 1.6); rim.position.set(5, 6, -7); scene.add(rim);
   const rim2 = new THREE.DirectionalLight(0xffd8b0, 0.9); rim2.position.set(-5, 4, 7); scene.add(rim2);
-  // four low stone fire bowls at the corners of the table
-  const torches = [], flames = [];
+  // four stone fire bowls at the corners of the table, with layered flames and rising embers
+  const torches = [], flames = [], embers = [], bowls = [];
+  let fireBoost = 0;
   const bowlStone = new THREE.MeshStandardMaterial({ color: 0x4a4640, roughness: 0.95, flatShading: true });
-  const flameMat = new THREE.MeshBasicMaterial({ color: 0xffa64d, transparent: true, opacity: 0.9 });
-  const flameCore = new THREE.MeshBasicMaterial({ color: 0xffe2a8 });
+  const add = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
+  const flameLayers = [[0.46, 1.5, add(0xff5a14, 0.55)], [0.32, 1.1, add(0xff9a30, 0.7)], [0.17, 0.62, add(0xffe6a8, 0.95)]];
+  const EMBER_TEX = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); const gr = g.createRadialGradient(16, 16, 0, 16, 16, 15); gr.addColorStop(0, 'rgba(255,230,170,1)'); gr.addColorStop(0.4, 'rgba(255,140,40,0.9)'); gr.addColorStop(1, 'rgba(255,80,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
   for (const [x, z] of [[-5.3, -5.3], [5.3, -5.3], [-5.3, 5.3], [5.3, 5.3]]) {
-    mesh(new THREE.CylinderGeometry(0.28, 0.38, 0.32, 8), bowlStone, x, -0.21, z, scene);
-    mesh(new THREE.CylinderGeometry(0.5, 0.3, 0.26, 8, 1, true), bowlStone, x, 0.08, z, scene).material.side = THREE.DoubleSide;
-    mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.04, 8), new THREE.MeshBasicMaterial({ color: 0x3a1a08 }), x, 0.16, z, scene);
-    const f1 = mesh(new THREE.ConeGeometry(0.3, 0.75, 7), flameMat, x, 0.52, z, scene); f1.castShadow = false;
-    const f2 = mesh(new THREE.ConeGeometry(0.15, 0.45, 6), flameCore, x, 0.4, z, scene); f2.castShadow = false;
-    flames.push(f1, f2);
-    const t = new THREE.PointLight(0xffa14a, 9, 9, 1.6); t.position.set(x, 0.9, z); scene.add(t); torches.push(t);
+    mesh(new THREE.CylinderGeometry(0.3, 0.42, 0.34, 8), bowlStone, x, -0.2, z, scene);
+    const bowl = mesh(new THREE.CylinderGeometry(0.58, 0.32, 0.3, 8, 1, true), bowlStone, x, 0.12, z, scene); bowl.material.side = THREE.DoubleSide;
+    mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.04, 8), new THREE.MeshBasicMaterial({ color: 0x5a1e06 }), x, 0.2, z, scene);
+    for (const [r, h, mat] of flameLayers) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(r, h, 9, 1, true), mat);
+      f.position.set(x, 0.2 + h / 2, z); f.userData.baseY = 0.2 + h / 2; f.userData.h = h; scene.add(f); flames.push(f);
+    }
+    const t = new THREE.PointLight(0xff9a40, 14, 11, 1.5); t.position.set(x, 1.1, z); scene.add(t); torches.push(t);
+    bowls.push(new THREE.Vector3(x, 0.3, z));
   }
+  function spawnEmber(b, fast) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: EMBER_TEX, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sp.position.set(b.x + (Math.random() - 0.5) * 0.5, b.y + Math.random() * 0.3, b.z + (Math.random() - 0.5) * 0.5);
+    sp.scale.setScalar(0.05 + Math.random() * 0.06);
+    scene.add(sp);
+    embers.push({ sp, v: new THREE.Vector3((Math.random() - 0.5) * 0.3, (fast ? 1.8 : 0.7) + Math.random() * 0.9, (Math.random() - 0.5) * 0.3), life: 0, max: 1.2 + Math.random() * 1.4, ph: Math.random() * 6 });
+  }
+  /* The fires flare up whenever stone is smashed. */
+  function flare(power) { fireBoost = Math.min(1.6, fireBoost + (power || 1)); if (!reducedMotion()) for (const b of bowls) for (let i = 0; i < 6; i++) spawnEmber(b, true); }
 
   // board
   const boardG = new THREE.Group(); scene.add(boardG);
@@ -249,13 +271,18 @@ export function create(container) {
   let orient = 'w', view = 'battle';
   const pieceAt = new Map();
   const sqPos = (sq) => new THREE.Vector3((sq & 7) - 3.5, 0, (sq >> 3) - 3.5);
-  const restFacing = (side) => (side === 'w' ? Math.PI : 0);
+  // pieces face the enemy; knights stand side-on toward the middle so their horse profile reads from your seat
+  const restFacing = (obj) => {
+    const u = obj.userData, base = u.side === 'w' ? Math.PI : 0;
+    if (u.type !== 'N') return base;
+    return base + (obj.position.x < 0 ? 1 : -1) * 1.15 * (u.side === 'w' ? -1 : 1);
+  };
 
   function camTarget() {
     const s = orient === 'w' ? 1 : -1;
     const fit = Math.max(1, 1.25 / (camera.aspect || 1)); // pull back on tall/narrow screens so the whole board fits
-    if (view === 'overhead') return { pos: new THREE.Vector3(0, 12.6 * fit, 2.3 * s * fit), look: new THREE.Vector3(0, 0, 0.2 * s) };
-    return { pos: new THREE.Vector3(0, 8.3 * fit, 8.7 * s * fit), look: new THREE.Vector3(0, -0.5, 0.5 * s) };
+    if (view === 'overhead') return { pos: new THREE.Vector3(0, 11.4 * fit, 2.1 * s * fit), look: new THREE.Vector3(0, 0, 0.2 * s) };
+    return { pos: new THREE.Vector3(0, 7.5 * fit, 7.7 * s * fit), look: new THREE.Vector3(0, -0.6, 0.55 * s) };
   }
   const camState = { pos: camTarget().pos.clone(), look: camTarget().look.clone() };
   let shakeAmp = 0;
@@ -332,8 +359,22 @@ export function create(container) {
     const pulse = 1.2 + Math.sin(tsec * 6) * 1.1;
     MAT.w.rune.emissiveIntensity = thinking.w ? pulse : 2.2;
     MAT.b.rune.emissiveIntensity = thinking.b ? pulse : 2.2;
-    torches.forEach((t, i) => { t.intensity = 8 + Math.sin(tsec * 9 + i * 2) * 0.8 + Math.sin(tsec * 23 + i) * 0.5; });
-    flames.forEach((f, i) => { const k = 1 + Math.sin(tsec * 11 + i * 1.7) * 0.08 + Math.sin(tsec * 27 + i) * 0.05; f.scale.set(1 / Math.sqrt(k), k, 1 / Math.sqrt(k)); f.rotation.y = tsec * (i % 2 ? 1.3 : -0.9); });
+    fireBoost *= Math.pow(0.25, dt);
+    torches.forEach((t, i) => { t.intensity = 13 + Math.sin(tsec * 9 + i * 2) * 1.6 + Math.sin(tsec * 23 + i) * 1.1 + fireBoost * 22; });
+    flames.forEach((f, i) => {
+      const k = 1 + Math.sin(tsec * 11 + i * 1.7) * 0.12 + Math.sin(tsec * 27 + i) * 0.07 + fireBoost * 0.7;
+      const w = 1 / Math.sqrt(k) + fireBoost * 0.15;
+      f.scale.set(w, k, w); f.position.y = 0.2 + (f.userData.h * k) / 2;
+      f.rotation.y = tsec * (i % 2 ? 1.3 : -0.9);
+      f.rotation.z = Math.sin(tsec * 3 + i) * 0.06;
+    });
+    if (!reducedMotion() && Math.random() < dt * 14) spawnEmber(bowls[Math.floor(Math.random() * bowls.length)]);
+    for (let i = embers.length - 1; i >= 0; i--) {
+      const e = embers[i]; e.life += dt;
+      e.sp.position.addScaledVector(e.v, dt); e.sp.position.x += Math.sin(tsec * 3 + e.ph) * dt * 0.15;
+      e.sp.material.opacity = Math.max(0, 1 - e.life / e.max);
+      if (e.life > e.max) { scene.remove(e.sp); e.sp.material.dispose(); embers.splice(i, 1); }
+    }
     // rubble physics
     for (let i = shards.length - 1; i >= 0; i--) {
       const s = shards[i]; s.life += dt;
@@ -375,7 +416,7 @@ export function create(container) {
   function place(p, sq) {
     const side = p === p.toUpperCase() ? 'w' : 'b';
     const obj = buildPiece(p.toUpperCase(), side, MAT);
-    obj.position.copy(sqPos(sq)); piecesG.add(obj); pieceAt.set(sq, obj);
+    obj.position.copy(sqPos(sq)); obj.rotation.y = restFacing(obj); piecesG.add(obj); pieceAt.set(sq, obj);
     return obj;
   }
   function setPosition(board) { clearPieces(); board.forEach((p, sq) => { if (p) place(p, sq); }); }
@@ -447,7 +488,7 @@ export function create(container) {
     const from = obj.rotation.y, to = Math.atan2(dx, dz);
     return tween(ms || 220, (t) => { obj.rotation.y = lerpAngle(from, to, t); });
   }
-  function faceRest(obj, ms) { const from = obj.rotation.y, to = restFacing(obj.userData.side); return tween(ms || 260, (t) => { obj.rotation.y = lerpAngle(from, to, t); }); }
+  function faceRest(obj, ms) { const from = obj.rotation.y, to = restFacing(obj); return tween(ms || 260, (t) => { obj.rotation.y = lerpAngle(from, to, t); }); }
 
   let attentive = null;
   function lift(sq, on) {
@@ -588,7 +629,7 @@ export function create(container) {
 
   function hitReact(victim, att) {
     if (!victim) return;
-    audio('crack'); shake(0.12);
+    audio('crack'); shake(0.12); flare(1);
     const dir = victim.position.clone().sub(att.position).setY(0).normalize();
     victim.userData.hitDir = dir;
     const vb = victim.userData.body;
@@ -669,7 +710,7 @@ export function create(container) {
   async function surrender(kingSq) {
     const k = pieceAt.get(kingSq); if (!k) return;
     const u = k.userData, w = u.weapon;
-    u.busy = true; audio('rumble');
+    u.busy = true; audio('rumble'); flare(1.6);
     // the victors raise their weapons
     for (const o of pieceAt.values()) if (o.userData.side !== u.side) { const ow = o.userData.weapon, r0 = ow.rotation.clone(); tween(700, (t) => { ow.rotation.x = r0.x - Math.sin(t * Math.PI) * 1.4; o.userData.body.position.y = Math.sin(t * Math.PI) * 0.1; }); }
     // the king kneels and lays down his sword
@@ -705,7 +746,7 @@ export function create(container) {
   return {
     el, is3D: true, setPosition, setOrientation, setView, mark, clearMarks, squareFromEvent, startDrag, moveDrag, endDrag, dragging,
     lift, relax, animateMove, topple, surrender, bow, pulseCheck, checkGuard, setThinking, showArrow,
-    get orientation() { return orient; }, get view() { return view; },
+    flare, get orientation() { return orient; }, get view() { return view; },
   };
 }
 
