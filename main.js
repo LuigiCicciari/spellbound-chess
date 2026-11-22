@@ -53,7 +53,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.8.0');
+    worker = new Worker('engine.worker.js?v=0.8.1');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -67,7 +67,7 @@
         if (move) return { move };
       } catch (e) {
         unrated = true;
-        toast('Stockfish could not load, so the built-in engine is playing. This game won\'t be rated.', 4500);
+        toast(`Stockfish could not load, so the built-in engine is playing.${rated() ? ' This game won\'t be rated.' : ''}`, 4500);
       }
     }
     return askWorker(payload);
@@ -142,20 +142,27 @@
 
   function syncBoard(rebuild) { if (rebuild !== false || !R.is3D) R.setPosition(game.board); refreshMarks(); renderMoves(); renderTrays(); updateHint(); updateButtons(); }
 
-  /* Casual helper: your pieces (not the king) that the other side attacks and none of yours defend.
-     It's a simple count of attackers and defenders, not a full blunder check: pins and uneven trades aren't considered. */
+  /* Casual helper: your pieces (not the king) that are attacked and not defended, or attacked by a cheaper piece
+     (a defended rook still loses material to a pawn). Pins and longer exchanges aren't considered, so it's a
+     reminder, not a full blunder check. */
+  const PVAL = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 100 };
   function dangerSquares() {
     if (rated() || !settings.danger || watching || !playerColor || phase === 'over' || phase === 'replay' || phase === 'review') return [];
-    const me = playerColor, them = me === 'w' ? 'b' : 'w', out = [];
+    const me = playerColor, them = me === 'w' ? 'b' : 'w', out = [], cheapest = new Array(64).fill(Infinity);
     for (let s = 0; s < 64; s++) {
       const p = game.board[s];
-      if (p && colorOf(p) === me && typeOf(p) !== 'K' && game.attacked(s, them) && !game.attacked(s, me)) out.push(s);
+      if (p && colorOf(p) === them) for (const t of game.attacksFrom(s)) cheapest[t] = Math.min(cheapest[t], PVAL[typeOf(p)]);
+    }
+    for (let s = 0; s < 64; s++) {
+      const p = game.board[s];
+      if (!p || colorOf(p) !== me || typeOf(p) === 'K' || cheapest[s] === Infinity) continue;
+      if (!game.attacked(s, me) || cheapest[s] < PVAL[typeOf(p)]) out.push(s);
     }
     return out;
   }
   function noteDanger() {
     const d = dangerSquares();
-    if (d.length) $('status').textContent += ` · ⚠ ${d.length} piece${d.length > 1 ? 's' : ''} attacked and undefended`;
+    if (d.length) $('status').textContent += ` · ⚠ ${d.length} piece${d.length > 1 ? 's' : ''} in danger`;
   }
   function updateMode() {
     const started = game.sanHistory.length > 0 && !watching && phase !== 'over' && phase !== 'review';
@@ -180,6 +187,7 @@
 
   /* ---------- game flow ---------- */
   async function newGame() {
+    if (store.get(PENDING, null)) flushPending();
     if (reviewState) endReview(false);
     reportToken++; $('reportOverlay').hidden = true;
     gameToken++;
@@ -260,6 +268,7 @@
 
   async function endGame(result, reason) {
     if (phase === 'over') return;                       // a game ends once (e.g. flag while a dialog was open)
+    const wasRated = rated();                           // decided now: the mode switch can't change a finished game
     phase = 'over'; selected = null; updateButtons(); clockStop(null, false);
     clearPending(); updateMode();
     if (promoResolve) promoResolve(null);
@@ -286,7 +295,7 @@
     }
     if (playerWon) window.SBAudio.play('chime');
     showResult();
-    if (rated() && !unrated && profile.handle && profile.start && game.sanHistory.length >= 2) saveGame(); // rated games save themselves
+    if (wasRated && !unrated && profile.handle && profile.start && game.sanHistory.length >= 2) saveGame(); // rated games save themselves
   }
 
   const REASONS = { checkmate: 'by checkmate', stalemate: 'by stalemate', threefold: 'by threefold repetition', fifty_move: 'by the 50-move rule',
@@ -324,7 +333,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.8.0',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.8.1',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -564,7 +573,17 @@
       engineTurn();
     })();
   }
-  $('watchBtn').onclick = () => { if (watching) newGame(); else startWatch(); };
+  $('watchBtn').onclick = async () => {
+    if (watching) { newGame(); return; }
+    if (['player', 'engine', 'animating', 'intro'].includes(phase) && game.sanHistory.length > 1) {
+      const ok = await confirmBox('Leave this game to watch?', rated() && profile.handle ? 'It counts as a loss on the leaderboard.' : 'It counts as a resignation.');
+      if (!ok) return;
+      gameToken++;
+      await endGame(playerColor === 'w' ? '0-1' : '1-0', 'resign');
+      $('resultOverlay').hidden = true;
+    }
+    startWatch();
+  };
   $('viewBtn').onclick = () => { if (!R.setView) return; R.setView(R.view === 'battle' ? 'overhead' : 'battle'); $('viewBtn').textContent = R.view === 'battle' ? '◎ Top view' : '◈ Battle view'; };
   $('flipBtn').onclick = () => { R.setOrientation(R.orientation === 'w' ? 'b' : 'w', game.board); refreshMarks(); renderTrays(); };
   $('level').value = String(settings.level); $('color').value = settings.color;
@@ -584,8 +603,8 @@
   function setMode(m) {
     if (settings.mode === m) return;
     settings.mode = m; saveSettings();
-    const fresh = watching || phase === 'over' || game.sanHistory.length === 0;
-    if (fresh && !watching) { mode = m; refreshMarks(); toast(m === 'rated' ? 'Rated: this game counts on the leaderboard.' : 'Casual: practice freely. This game won\'t change your rating.'); }
+    const fresh = !watching && phase !== 'over' && phase !== 'review' && phase !== 'replay' && game.sanHistory.length === 0;
+    if (fresh) { mode = m; refreshMarks(); toast(m === 'rated' ? 'Rated: this game counts on the leaderboard.' : 'Casual: practice freely. This game won\'t change your rating.'); }
     else if (!watching) toast(`${m === 'rated' ? 'Rated' : 'Casual'} starts with your next game. This one stays ${mode === 'rated' ? 'Rated' : 'Casual'}.`);
     updateMode(); updateButtons();
   }
@@ -603,7 +622,7 @@
     lastMove = h ? { from: h.from, to: h.to } : null;
     selected = null; R.showArrow(-1);
     syncBoard(true);
-    setStatus('Move taken back · Your move'); noteDanger();
+    setStatus(game.inCheck() ? 'Move taken back · Check! Your move' : 'Move taken back · Your move', game.inCheck()); noteDanger(); updateMode();
   };
   $('sfHintBtn').onclick = async () => {
     if (mode !== 'casual' || watching || phase !== 'player') return;
@@ -623,23 +642,26 @@
 
   /* ---------- battle report ---------- */
   // Win chance (0-100) from a centipawn score, the curve Lichess uses; scores past ±15 pawns are treated as decided.
-  const winPct = (cp) => 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * Math.max(-1500, Math.min(1500, cp)))) - 1);
+  const winPct = (cp) => 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * Math.max(-1000, Math.min(1000, cp)))) - 1);
   const moveAcc = (drop) => Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * Math.max(0, drop)) - 3.1669));
   let report = null;          // { key, evals: [White's centipawns after ply i], best: [best move from position i], done }
-  let reportToken = 0, reviewState = null, reviewAnim = 0, sfDown = false;
+  let reportToken = 0, reviewState = null, reviewAnim = 0;
   const finalGame = () => (reviewState ? reviewState.final : game);
   const reportKey = (g) => `${playerColor}|${level}|${g.pgn()}`;
 
-  async function evalPosition(g, ms) {
+  // One report uses one judge: Stockfish, or (if it can't load) the built-in engine for every move. Scores from
+  // the two aren't on the same scale, so mixing them would invent blunders.
+  async function evalPosition(g, ms, src) {
     const st = g.status();
     if (st) return { w: st.result === '1-0' ? 10000 : st.result === '0-1' ? -10000 : 0, best: null };
     const fen = g.fen();
-    if (!sfDown && window.SBStockfish && window.SBStockfish.analyse) {
-      try { const r = await window.SBStockfish.analyse(fen, ms); return { w: g.turn === 'w' ? r.score : -r.score, best: r.best }; }
-      catch (e) { sfDown = true; }
+    if (src === 'sf') {
+      const r = await window.SBStockfish.analyse(fen, ms);  // throws if Stockfish fails; the caller restarts with the built-in engine
+      return { w: g.turn === 'w' ? r.score : -r.score, best: r.best };
     }
-    const { value } = await askWorker({ kind: 'eval', fen, color: 'w' });
-    return { w: value, best: null };
+    const res = await askWorker({ kind: 'eval', fen, color: 'w' });
+    if (!res || typeof res.value !== 'number' || !isFinite(res.value)) throw new Error('eval failed');
+    return { w: res.value, best: null };
   }
 
   async function openReport() {
@@ -649,7 +671,7 @@
     const key = reportKey(final);
     if (!report || report.key !== key) {
       const saved = store.get('spellbound.report', null);
-      report = saved && saved.key === key ? saved : { key, evals: [], best: [], done: false };
+      report = saved && saved.key === key ? saved : { key, evals: [], best: [], done: false, src: window.SBStockfish && window.SBStockfish.analyse ? 'sf' : 'engine' };
     }
     renderReport();
     $('reportClose').focus();
@@ -663,11 +685,18 @@
     for (let i = 0; i <= n; i++) {
       if (i > 0) g.move(moves[i - 1]);
       if (report.evals[i] !== undefined && report.evals[i] !== null) continue;
-      const r = await evalPosition(g, ms);
+      let r;
+      try { r = await evalPosition(g, ms, report.src); }
+      catch (e) {
+        if (token !== reportToken) return;
+        if (report.src === 'sf') { report.src = 'engine'; report.evals = []; report.best = []; renderReport(); runAnalysis(final); return; } // start over with one judge
+        $('reportProgress').textContent = 'The analysis stopped early. Close and reopen the report to try again.'; return;
+      }
       if (token !== reportToken) return;            // a new game or a new report took over
       report.evals[i] = r.w; report.best[i] = r.best;
-      $('reportProgress').textContent = `Stockfish is studying the battle… ${i} of ${n} moves`;
+      $('reportProgress').textContent = `${report.src === 'sf' ? 'Stockfish' : 'The built-in engine'} is studying the battle… ${i} of ${n} moves`;
       if (i % 3 === 0 || i === n) renderReport();
+      if (i % 10 === 0) store.set('spellbound.report', report); // progress survives a reload
     }
     report.done = true;
     store.set('spellbound.report', report);          // reopening the report doesn't repeat the work
@@ -682,11 +711,23 @@
       const m = final.moveHistory[i - 1], mover = colorOf(m.piece);
       const pov = (cp) => (mover === 'w' ? winPct(cp) : 100 - winPct(cp));
       const before = pov(e[i - 1]), after = pov(e[i]);
-      out.push({ i, mover, san: final.sanHistory[i - 1], drop: before - after, acc: moveAcc(before - after), best: report.best[i - 1] });
+      const best = report.best[i - 1];
+      out.push({ i, mover, san: final.sanHistory[i - 1], drop: before - after, acc: moveAcc(before - after), best,
+        top: !!best && best.from === m.from && best.to === m.to && (!best.promotion || (m.promotion || '').toLowerCase() === best.promotion.toLowerCase()),
+        captured: m.captured || null });
     }
     return out;
   }
-  const kind = (drop) => (drop >= 20 ? 'blunder' : drop >= 10 ? 'mistake' : drop >= 5 ? 'inaccuracy' : null);
+  // Lichess's thresholds: a move that loses 30+ points of winning chance is a blunder, 20+ a mistake, 10+ an inaccuracy
+  const kind = (drop) => (drop >= 30 ? 'blunder' : drop >= 20 ? 'mistake' : drop >= 10 ? 'inaccuracy' : null);
+  // Game accuracy: the average of the plain mean and the harmonic mean of the move accuracies (Lichess blends the two
+  // the same way; it also weights the plain mean by how sharp each position was, which this skips)
+  const gameAcc = (a) => {
+    if (!a.length) return null;
+    const mean = a.reduce((x, m) => x + m.acc, 0) / a.length;
+    const harm = a.length / a.reduce((x, m) => x + 1 / Math.max(1, m.acc), 0);
+    return Math.round((mean + harm) / 2);
+  };
   const moveLabel = (i) => `${Math.ceil(i / 2)}${i % 2 ? '' : ' (Black)'}`;
   function sanOf(ply, spec) {
     if (!spec) return null;
@@ -697,7 +738,7 @@
   function renderReport() {
     const final = finalGame(), n = final.moveHistory.length, ms = reportMoves();
     const mine = ms.filter((m) => m.mover === playerColor), theirs = ms.filter((m) => m.mover !== playerColor);
-    const avg = (a) => (a.length ? Math.round(a.reduce((x, m) => x + m.acc, 0) / a.length) : null);
+    const avg = gameAcc;
     const caps = (c) => final.moveHistory.filter((m) => m.captured && colorOf(m.piece) === c).length;
     const them = playerColor === 'w' ? 'b' : 'w';
     const counts = { blunder: 0, mistake: 0, inaccuracy: 0 }; mine.forEach((m) => { const k = kind(m.drop); if (k) counts[k]++; });
@@ -708,24 +749,31 @@
       + stat(`${caps(playerColor)} · ${caps(them)}`, 'Captures (you · stones)') + stat(report.done ? `${counts.blunder} · ${counts.mistake} · ${counts.inaccuracy}` : null, 'Blunders · mistakes · inaccuracies');
     // turning points: your three costliest moves; best moment: your biggest gain
     const worst = mine.filter((m) => kind(m.drop)).sort((a, b) => b.drop - a.drop).slice(0, 3).sort((a, b) => a.i - b.i);
-    const gain = mine.slice().sort((a, b) => a.drop - b.drop)[0];
-    const bestMoment = gain && gain.i > 4 && -gain.drop >= 5 ? gain : null;
+    // ★ Best move: one of yours that matched Stockfish's first choice where it mattered most: right after the stones
+    // slipped (you punished it), or when it won material. Opening moves don't count.
+    const VAL = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+    const prevDrop = (m) => { const p = ms.find((x) => x.i === m.i - 1); return p ? Math.max(0, p.drop) : 0; };
+    const bestMoment = report.src === 'sf'
+      ? mine.filter((m) => m.top && m.i > 6).map((m) => ({ m, score: prevDrop(m) + (m.captured ? VAL[m.captured.toLowerCase()] * 3 : 0) }))
+        .filter((x) => x.score >= 3).sort((a, b) => b.score - a.score).map((x) => x.m)[0] || null
+      : null;
     drawChart(n, worst, bestMoment);
     const box = $('reportMoments'); box.innerHTML = '';
     if (!report.done) { box.innerHTML = '<div class="small">Turning points appear when the analysis finishes.</div>'; return; }
-    $('reportProgress').textContent = sfDown ? 'Stockfish could not load, so the game\'s own engine did the analysis (less precise).' : '';
+    $('reportProgress').textContent = report.src === 'sf' ? '' : 'Stockfish could not load, so the game\'s own engine did the analysis (less precise, and no better-move suggestions).';
     const add = (m, tag, label, text, btn, fn) => {
       const d = document.createElement('div'); d.className = 'moment';
       d.innerHTML = `<span class="tag ${tag}">${label}</span><span class="what"></span>`;
       d.querySelector('.what').textContent = text;
-      const b = document.createElement('button'); b.className = 'btn'; b.textContent = btn; b.onclick = fn; d.appendChild(b);
+      const b = document.createElement('button'); b.className = 'btn'; b.textContent = btn; b.onclick = fn; b.dataset.ply = m.i;
+      b.setAttribute('aria-label', `${btn.replace('▶ ', '')} move ${moveLabel(m.i)}, ${m.san}`); d.appendChild(b);
       box.appendChild(d);
     };
     worst.forEach((m, k) => {
       const better = sanOf(m.i - 1, m.best);
       add(m, kind(m.drop), `${k + 1} · ${kind(m.drop).toUpperCase()}`, `Move ${moveLabel(m.i)} · You played ${m.san}${better && better !== m.san ? ` · better was ${better}` : ''} (winning chances −${Math.round(m.drop)}%)`, 'Review', () => review(m.i, false));
     });
-    if (bestMoment) add(bestMoment, 'best', '★ BEST', `Move ${moveLabel(bestMoment.i)} · ${bestMoment.san}: your strongest move (+${Math.round(-bestMoment.drop)}%)`, '▶ Replay', () => review(bestMoment.i, true));
+    if (bestMoment) add(bestMoment, 'best', '★ BEST', `Move ${moveLabel(bestMoment.i)} · ${bestMoment.san}: Stockfish's own first choice${prevDrop(bestMoment) >= 10 ? ', punishing the stones\' slip' : bestMoment.captured ? ', winning material' : ''}`, '▶ Replay', () => review(bestMoment.i, true));
     if (!worst.length && !bestMoment) box.innerHTML = '<div class="small">A clean game: no big swings either way.</div>';
   }
 
@@ -760,7 +808,7 @@
     $('reviewText').textContent = `Move ${moveLabel(i)} · You played ${final.sanHistory[i - 1]}${better && better !== final.sanHistory[i - 1] ? `. Better: ${better} (arrow).` : '.'}`;
     if (better && better !== final.sanHistory[i - 1]) R.showArrow(best.from, best.to);
     $('reviewBetter').hidden = !better || better === final.sanHistory[i - 1];
-    $('reviewBar').hidden = false;
+    $('reviewBar').hidden = false; $('reviewBack').focus();
     setStatus('Reviewing the battle');
     if (replay) playLine('mine', true);
   }
@@ -783,13 +831,17 @@
   }
   function endReview(showReport) {
     if (!reviewState) return;
+    const ply = reviewState.ply;
     reviewAnim++;
     game = reviewState.final; reviewState = null; phase = 'over';
     const h = game.moveHistory[game.moveHistory.length - 1]; lastMove = h ? { from: h.from, to: h.to } : null;
     R.showArrow(-1); $('reviewBar').hidden = true; showClocks(!!clock);
     R.setPosition(game.board); refreshMarks(); renderMoves(); renderTrays();
     setStatus('Game over');
-    if (showReport) { $('reportOverlay').hidden = false; renderReport(); }
+    if (showReport) {
+      $('reportOverlay').hidden = false; renderReport();
+      const back = document.querySelector(`#reportMoments .btn[data-ply="${ply}"]`); (back || $('reportClose')).focus();
+    }
   }
   function reportPgn() {
     const final = finalGame(), me = 'You', bot = `Level ${level} ${LEVELS[level].name} (${LEVELS[level].elo})`;
@@ -909,7 +961,7 @@
       if (!ladderData.history.length) { body.innerHTML = '<div class="empty">Your saved games will show here.</div>'; return; }
       const rows = ladderData.history.slice(-20).reverse().map((h) => {
         const g = h, d = h.delta;
-        return `<tr><td>${esc(String(g.created_at).slice(0, 10))}</td><td>Lv ${g.level}</td><td>${g.player_color === 'w' ? 'White' : 'Black'}</td>
+        return `<tr><td>${esc(String(g.created_at).slice(0, 10))}</td><td>Lv ${Number(g.level)}</td><td>${g.player_color === 'w' ? 'White' : 'Black'}</td>
           <td>${g.result === 'W' ? 'Win' : g.result === 'D' ? 'Draw' : 'Loss'}</td><td class="num">${d >= 0 ? '+' : '−'}${Math.abs(Math.round(d))}</td></tr>`;
       }).join('');
       body.innerHTML = `<table><thead><tr><th>Date</th><th>Level</th><th>Color</th><th>Result</th><th class="num">Rating</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -923,9 +975,9 @@
     const top = list.slice(0, 10);
     const row = (p, i) => {
       const val = ladderTab === 'today' ? `${p.gain >= 0 ? '+' : '−'}${Math.abs(Math.round(p.gain))}` : fmt(p.rating);
-      const best = ladderTab === 'today' ? '' : (p.best ? 'Lv ' + p.best : '—');
+      const best = ladderTab === 'today' ? '' : (p.best ? 'Lv ' + Number(p.best) : '—');
       return `<tr class="${p.player_id === me ? 'me' : ''}"><td class="num">${i + 1}</td><td>${p.player_id === me ? '<b>YOU</b> · ' : ''}${esc(p.handle)}</td>
-        <td class="num">${val}</td><td class="num">${p.games}</td><td class="num">${best}</td></tr>`;
+        <td class="num">${val}</td><td class="num">${Number(p.games)}</td><td class="num">${best}</td></tr>`;
     };
     let rows = top.map(row).join('');
     const mine = ladderData.me;
