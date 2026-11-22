@@ -46,7 +46,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.4.0');
+    worker = new Worker('engine.worker.js?v=0.4.1');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -262,7 +262,7 @@
     const rec = {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: gameOver.res, termination: gameOver.reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.4.0',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.4.1',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
     if (!window.SBLadder.verify(rec)) { $('saveNote').textContent = 'This game could not be verified, so it was not saved.'; return; }
@@ -342,15 +342,18 @@
   boardEl.addEventListener('pointerdown', (ev) => {
     window.SBAudio.unlock();
     if (phase !== 'player') return;
-    const sq = R.squareFromEvent(ev); if (sq < 0) return;
-    const p = game.board[sq];
+    // The square under the pointer wins: tall pieces must never block the square (or piece) behind them.
+    const hitSq = R.squareFromEvent(ev);
+    const ground = R.groundSquareFromEvent ? R.groundSquareFromEvent(ev) : hitSq;
+    if (hitSq < 0 && ground < 0) return;
     if (selected !== null) {
-      // a tall piece can hide the square behind it: if the square under the pointer is a legal target, use it
-      const ground = R.groundSquareFromEvent ? R.groundSquareFromEvent(ev) : sq;
       const targets = legalFrom(selected).map((m) => m.to);
-      const pick = [sq, ground].find((s) => s >= 0 && s !== selected && targets.includes(s));
+      const pick = [ground, hitSq].find((s) => s >= 0 && s !== selected && targets.includes(s));
       if (pick !== undefined) { const from = selected; tryMove(from, pick); return; }
     }
+    const own = (s) => s >= 0 && game.board[s] && colorOf(game.board[s]) === playerColor;
+    const sq = own(ground) ? ground : own(hitSq) ? hitSq : (ground >= 0 ? ground : hitSq);
+    const p = game.board[sq];
     if (p && colorOf(p) === playerColor) {
       boardEl.setPointerCapture(ev.pointerId);
       pointerDownSq = sq; dragStarted = false; downPos = { x: ev.clientX, y: ev.clientY };
