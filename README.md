@@ -16,6 +16,7 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 - Click, drag, or type moves (`Nf3`, `e2e4`)
 - Animated moves, captures, promotions, castling and checkmate, with synthesized stone sound effects
 - **Casual** and **Rated** modes. Casual is for practice: take back moves, ask Stockfish for a hint (shown as an arrow), and see which of your pieces are attacked and undefended. Rated games count on the leaderboard. The mode is fixed once a game starts; newcomers start in Casual.
+- 📜 **Battle report** after every game: Stockfish analyses each move (in the background, cached), then shows a chart of White's winning chances, your accuracy and the stones' (Lichess-style formula), captures, your three costliest moves with the better move (Review jumps straight to the position, with ▶ buttons to play your move or the better one), your strongest move replayed with the cinematic camera, Copy PGN and Open in Lichess. Undo in Casual also puts the clocks back.
 - Clicking a tall piece picks that piece; clicking the same spot again picks a shorter piece hidden behind it
 - Elo rating: the first time you finish a Rated game you pick a name and New (400), Sometimes (800) or A lot (1200); after that Rated games save automatically. Ratings move fastest for your first 10 games. ALL TIME, TODAY and MINE leaderboard tabs
 - At levels 4–7 Stockfish decides whether to accept a draw offer (offers open after move 20)

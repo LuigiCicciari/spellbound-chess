@@ -53,7 +53,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.7.1');
+    worker = new Worker('engine.worker.js?v=0.8.0');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -145,7 +145,7 @@
   /* Casual helper: your pieces (not the king) that the other side attacks and none of yours defend.
      It's a simple count of attackers and defenders, not a full blunder check: pins and uneven trades aren't considered. */
   function dangerSquares() {
-    if (rated() || !settings.danger || watching || !playerColor || phase === 'over' || phase === 'replay') return [];
+    if (rated() || !settings.danger || watching || !playerColor || phase === 'over' || phase === 'replay' || phase === 'review') return [];
     const me = playerColor, them = me === 'w' ? 'b' : 'w', out = [];
     for (let s = 0; s < 64; s++) {
       const p = game.board[s];
@@ -158,10 +158,14 @@
     if (d.length) $('status').textContent += ` · ⚠ ${d.length} piece${d.length > 1 ? 's' : ''} attacked and undefended`;
   }
   function updateMode() {
-    const started = game.sanHistory.length > 0 && !watching && phase !== 'over';
-    $('modeCasual').setAttribute('aria-checked', String(settings.mode === 'casual'));
-    $('modeRated').setAttribute('aria-checked', String(settings.mode === 'rated'));
-    $('modeCasual').closest('.mode-switch').classList.toggle('locked', started && settings.mode !== mode);
+    const started = game.sanHistory.length > 0 && !watching && phase !== 'over' && phase !== 'review';
+    const shown = started ? mode : settings.mode;   // during a game the switch shows the game's own mode
+    $('modeCasual').setAttribute('aria-checked', String(shown === 'casual'));
+    $('modeRated').setAttribute('aria-checked', String(shown === 'rated'));
+    const queued = started && settings.mode !== mode;
+    $('modeCasual').closest('.mode-switch').classList.toggle('locked', started);
+    $('modeCasual').querySelector('span').textContent = queued && settings.mode === 'casual' ? 'next game' : 'practice';
+    $('modeRated').querySelector('span').textContent = queued && settings.mode === 'rated' ? 'next game' : 'leaderboard';
     $('casualRow').hidden = mode !== 'casual';
     $('dangerBtn').setAttribute('aria-pressed', String(!!settings.danger));
   }
@@ -176,6 +180,8 @@
 
   /* ---------- game flow ---------- */
   async function newGame() {
+    if (reviewState) endReview(false);
+    reportToken++; $('reportOverlay').hidden = true;
     gameToken++;
     $('resultOverlay').hidden = true; $('promo').hidden = true; $('hintPanel').hidden = true;
     R.setThinking('w', false); R.setThinking('b', false); R.showArrow(-1);
@@ -235,7 +241,7 @@
     if (token !== gameToken) return true;
     lastMove = { from: played.from, to: played.to };
     syncBoard(false);
-    if (!watching) notePending();
+    if (!watching) { notePending(); if (game.sanHistory.length <= 2) updateMode(); }
     const moverName = colorOf(played.piece) === playerColor ? 'You' : 'Stones';
     const st = game.status();
     if (st) { await endGame(st.result, st.reason); return true; }
@@ -255,7 +261,7 @@
   async function endGame(result, reason) {
     if (phase === 'over') return;                       // a game ends once (e.g. flag while a dialog was open)
     phase = 'over'; selected = null; updateButtons(); clockStop(null, false);
-    clearPending();
+    clearPending(); updateMode();
     if (promoResolve) promoResolve(null);
     if (confirmResolve) confirmResolve(false);
     R.setThinking('w', false); R.setThinking('b', false);
@@ -309,6 +315,7 @@
     if (unrated) { el.textContent = 'Unrated game'; $('saveBtn').textContent = 'Not rated'; }
     if (!rated()) { $('saveBtn').disabled = true; $('saveBtn').textContent = 'Casual game'; el.className = 'result-delta neutral'; el.textContent = 'Not rated'; $('saveNote').textContent = 'Switch to Rated before your next game to play for the leaderboard.'; }
     else if (game.sanHistory.length < 2) { $('saveBtn').disabled = true; $('saveBtn').textContent = 'Too short to rate'; el.textContent = ''; $('saveNote').textContent = ''; }
+    $('reportBtn').hidden = game.sanHistory.length < 2;
     $('resultOverlay').hidden = false;
     $('saveBtn').focus();
   }
@@ -317,7 +324,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.7.1',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.8.0',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -539,6 +546,8 @@
     else toast('The stones refuse your draw: they think they are winning.');
   };
   function startWatch() {
+    if (reviewState) endReview(false);
+    reportToken++; $('reportOverlay').hidden = true;
     gameToken++;
     $('resultOverlay').hidden = true; $('promo').hidden = true; $('hintPanel').hidden = true;
     game = new Game(); lastMove = null; gameOver = null; selected = null;
@@ -589,6 +598,7 @@
     if (!n || game.sanHistory.length - n < (playerColor === 'b' ? 1 : 0)) return;
     gameToken++;
     for (let i = 0; i < n; i++) game.undo();
+    if (clock) { const snap = clockSnaps[game.sanHistory.length]; if (snap) { clock.w = snap.w; clock.b = snap.b; } clockSnaps.length = game.sanHistory.length; clockStart(game.turn); }
     const h = game.moveHistory[game.moveHistory.length - 1];
     lastMove = h ? { from: h.from, to: h.to } : null;
     selected = null; R.showArrow(-1);
@@ -610,6 +620,193 @@
     R.showArrow(probe.from, probe.to);
     setStatus(`Hint: ${probe.san} · Your move`);
   };
+
+  /* ---------- battle report ---------- */
+  // Win chance (0-100) from a centipawn score, the curve Lichess uses; scores past ±15 pawns are treated as decided.
+  const winPct = (cp) => 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * Math.max(-1500, Math.min(1500, cp)))) - 1);
+  const moveAcc = (drop) => Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * Math.max(0, drop)) - 3.1669));
+  let report = null;          // { key, evals: [White's centipawns after ply i], best: [best move from position i], done }
+  let reportToken = 0, reviewState = null, reviewAnim = 0, sfDown = false;
+  const finalGame = () => (reviewState ? reviewState.final : game);
+  const reportKey = (g) => `${playerColor}|${level}|${g.pgn()}`;
+
+  async function evalPosition(g, ms) {
+    const st = g.status();
+    if (st) return { w: st.result === '1-0' ? 10000 : st.result === '0-1' ? -10000 : 0, best: null };
+    const fen = g.fen();
+    if (!sfDown && window.SBStockfish && window.SBStockfish.analyse) {
+      try { const r = await window.SBStockfish.analyse(fen, ms); return { w: g.turn === 'w' ? r.score : -r.score, best: r.best }; }
+      catch (e) { sfDown = true; }
+    }
+    const { value } = await askWorker({ kind: 'eval', fen, color: 'w' });
+    return { w: value, best: null };
+  }
+
+  async function openReport() {
+    if (!gameOver || watching) return;
+    const final = finalGame();
+    $('resultOverlay').hidden = true; $('reportOverlay').hidden = false;
+    const key = reportKey(final);
+    if (!report || report.key !== key) {
+      const saved = store.get('spellbound.report', null);
+      report = saved && saved.key === key ? saved : { key, evals: [], best: [], done: false };
+    }
+    renderReport();
+    $('reportClose').focus();
+    if (!report.done) runAnalysis(final);
+  }
+
+  async function runAnalysis(final) {
+    const token = ++reportToken, moves = final.moveHistory.slice(), n = moves.length;
+    const ms = n > 100 ? 120 : n > 60 ? 160 : 220;
+    const g = new Game();
+    for (let i = 0; i <= n; i++) {
+      if (i > 0) g.move(moves[i - 1]);
+      if (report.evals[i] !== undefined && report.evals[i] !== null) continue;
+      const r = await evalPosition(g, ms);
+      if (token !== reportToken) return;            // a new game or a new report took over
+      report.evals[i] = r.w; report.best[i] = r.best;
+      $('reportProgress').textContent = `Stockfish is studying the battle… ${i} of ${n} moves`;
+      if (i % 3 === 0 || i === n) renderReport();
+    }
+    report.done = true;
+    store.set('spellbound.report', report);          // reopening the report doesn't repeat the work
+    renderReport();
+  }
+
+  /* Move-by-move numbers from whatever has been analysed so far. */
+  function reportMoves() {
+    const final = finalGame(), e = report.evals, out = [];
+    for (let i = 1; i <= final.moveHistory.length; i++) {
+      if (e[i - 1] === undefined || e[i] === undefined || e[i - 1] === null || e[i] === null) break;
+      const m = final.moveHistory[i - 1], mover = colorOf(m.piece);
+      const pov = (cp) => (mover === 'w' ? winPct(cp) : 100 - winPct(cp));
+      const before = pov(e[i - 1]), after = pov(e[i]);
+      out.push({ i, mover, san: final.sanHistory[i - 1], drop: before - after, acc: moveAcc(before - after), best: report.best[i - 1] });
+    }
+    return out;
+  }
+  const kind = (drop) => (drop >= 20 ? 'blunder' : drop >= 10 ? 'mistake' : drop >= 5 ? 'inaccuracy' : null);
+  const moveLabel = (i) => `${Math.ceil(i / 2)}${i % 2 ? '' : ' (Black)'}`;
+  function sanOf(ply, spec) {
+    if (!spec) return null;
+    const g = new Game(); finalGame().moveHistory.slice(0, ply).forEach((m) => g.move(m));
+    const p = g.move(spec); return p ? p.san : null;
+  }
+
+  function renderReport() {
+    const final = finalGame(), n = final.moveHistory.length, ms = reportMoves();
+    const mine = ms.filter((m) => m.mover === playerColor), theirs = ms.filter((m) => m.mover !== playerColor);
+    const avg = (a) => (a.length ? Math.round(a.reduce((x, m) => x + m.acc, 0) / a.length) : null);
+    const caps = (c) => final.moveHistory.filter((m) => m.captured && colorOf(m.piece) === c).length;
+    const them = playerColor === 'w' ? 'b' : 'w';
+    const counts = { blunder: 0, mistake: 0, inaccuracy: 0 }; mine.forEach((m) => { const k = kind(m.drop); if (k) counts[k]++; });
+    const res = gameOver ? gameOver.res : '';
+    $('reportSub').textContent = `${res === 'W' ? 'Victory' : res === 'D' ? 'Draw' : 'Defeat'} against Level ${level} ${LEVELS[level].name} · ${Math.ceil(n / 2)} moves · ${mode === 'rated' ? 'Rated' : 'Casual'} game`;
+    const stat = (v, label) => `<div class="stat"><b>${v === null ? '…' : v}</b><span>${label}</span></div>`;
+    $('reportStats').innerHTML = stat(avg(mine) === null ? null : avg(mine) + '%', 'Your accuracy') + stat(avg(theirs) === null ? null : avg(theirs) + '%', "The stones' accuracy")
+      + stat(`${caps(playerColor)} · ${caps(them)}`, 'Captures (you · stones)') + stat(report.done ? `${counts.blunder} · ${counts.mistake} · ${counts.inaccuracy}` : null, 'Blunders · mistakes · inaccuracies');
+    // turning points: your three costliest moves; best moment: your biggest gain
+    const worst = mine.filter((m) => kind(m.drop)).sort((a, b) => b.drop - a.drop).slice(0, 3).sort((a, b) => a.i - b.i);
+    const gain = mine.slice().sort((a, b) => a.drop - b.drop)[0];
+    const bestMoment = gain && gain.i > 4 && -gain.drop >= 5 ? gain : null;
+    drawChart(n, worst, bestMoment);
+    const box = $('reportMoments'); box.innerHTML = '';
+    if (!report.done) { box.innerHTML = '<div class="small">Turning points appear when the analysis finishes.</div>'; return; }
+    $('reportProgress').textContent = sfDown ? 'Stockfish could not load, so the game\'s own engine did the analysis (less precise).' : '';
+    const add = (m, tag, label, text, btn, fn) => {
+      const d = document.createElement('div'); d.className = 'moment';
+      d.innerHTML = `<span class="tag ${tag}">${label}</span><span class="what"></span>`;
+      d.querySelector('.what').textContent = text;
+      const b = document.createElement('button'); b.className = 'btn'; b.textContent = btn; b.onclick = fn; d.appendChild(b);
+      box.appendChild(d);
+    };
+    worst.forEach((m, k) => {
+      const better = sanOf(m.i - 1, m.best);
+      add(m, kind(m.drop), `${k + 1} · ${kind(m.drop).toUpperCase()}`, `Move ${moveLabel(m.i)} · You played ${m.san}${better && better !== m.san ? ` · better was ${better}` : ''} (winning chances −${Math.round(m.drop)}%)`, 'Review', () => review(m.i, false));
+    });
+    if (bestMoment) add(bestMoment, 'best', '★ BEST', `Move ${moveLabel(bestMoment.i)} · ${bestMoment.san}: your strongest move (+${Math.round(-bestMoment.drop)}%)`, '▶ Replay', () => review(bestMoment.i, true));
+    if (!worst.length && !bestMoment) box.innerHTML = '<div class="small">A clean game: no big swings either way.</div>';
+  }
+
+  function drawChart(n, worst, bestMoment) {
+    const svgEl = $('reportChart'), W = 600, H = 150, X = (i) => 10 + (n ? (i / n) * (W - 20) : 0), Y = (wp) => H - 10 - (wp / 100) * (H - 20);
+    const pts = []; for (let i = 0; i <= n; i++) { if (report.evals[i] === undefined || report.evals[i] === null) break; pts.push([X(i), Y(winPct(report.evals[i]))]); }
+    const line = pts.map((p) => p.join(',')).join(' ');
+    const area = pts.length ? `${X(0)},${Y(50)} ${line} ${pts[pts.length - 1][0]},${Y(50)}` : '';
+    const dot = (m, cls, label) => { const p = pts[m.i]; return p ? `<circle cx="${p[0]}" cy="${p[1]}" r="6" class="${cls}"/><text x="${p[0]}" y="${p[1] - 10}" class="chart-lab">${label}</text>` : ''; };
+    svgEl.innerHTML = `<line x1="10" x2="${W - 10}" y1="${Y(50)}" y2="${Y(50)}" class="chart-mid"/>
+      <text x="14" y="18" class="chart-lab left">White ahead</text><text x="14" y="${H - 14}" class="chart-lab left">Black ahead</text>
+      ${area ? `<polygon points="${area}" class="chart-area"/>` : ''}${line ? `<polyline points="${line}" class="chart-line"/>` : ''}
+      ${worst.map((m, k) => dot(m, 'chart-bad', String(k + 1))).join('')}${bestMoment ? dot(bestMoment, 'chart-good', '★') : ''}`;
+    const last = pts.length ? Math.round(winPct(report.evals[pts.length - 1])) : 50;
+    svgEl.setAttribute('aria-label', `Chart of White's winning chances over ${n} moves; at the end White's chances are ${last}%.`);
+  }
+
+  /* Review: the board jumps straight to the position before that move (no replaying the whole game). */
+  function review(i, replay) {
+    const final = finalGame();
+    if (!reviewState) reviewState = { final };
+    reportToken++;                                   // stop any analysis still running
+    $('reportOverlay').hidden = true;
+    phase = 'review'; gameToken++; reviewAnim++;
+    const g = new Game(); final.moveHistory.slice(0, i - 1).forEach((m) => g.move(m));
+    game = g; reviewState.ply = i; selected = null;
+    const prev = g.moveHistory[g.moveHistory.length - 1]; lastMove = prev ? { from: prev.from, to: prev.to } : null;
+    R.setPosition(g.board); R.showArrow(-1); showClocks(false);
+    const played = final.moveHistory[i - 1], best = report.best[i - 1];
+    refreshMarks({ selected: played.from }); renderMoves(); renderTrays();
+    const better = sanOf(i - 1, best);
+    $('reviewText').textContent = `Move ${moveLabel(i)} · You played ${final.sanHistory[i - 1]}${better && better !== final.sanHistory[i - 1] ? `. Better: ${better} (arrow).` : '.'}`;
+    if (better && better !== final.sanHistory[i - 1]) R.showArrow(best.from, best.to);
+    $('reviewBetter').hidden = !better || better === final.sanHistory[i - 1];
+    $('reviewBar').hidden = false;
+    setStatus('Reviewing the battle');
+    if (replay) playLine('mine', true);
+  }
+  async function playLine(which, cinematic) {
+    if (!reviewState || phase !== 'review') return;
+    const i = reviewState.ply, g = game, token = ++reviewAnim;
+    const spec = which === 'mine' ? reviewState.final.moveHistory[i - 1] : report.best[i - 1];
+    if (!spec) return;
+    for (const id of ['reviewMine', 'reviewBetter']) $(id).disabled = true;
+    R.showArrow(-1);
+    if (cinematic && R.setCinematic) R.setCinematic(true);
+    const played = g.move(spec);
+    if (played) { await R.animateMove(played, { celebrate: true }); await wait(900); }
+    if (R.setCinematic) R.setCinematic(settings.speed === 'cinematic');
+    if (token !== reviewAnim || phase !== 'review') return;
+    if (played) g.undo();
+    R.setPosition(g.board); refreshMarks({ selected: reviewState.final.moveHistory[i - 1].from });
+    const best = report.best[i - 1]; if (best && !$('reviewBetter').hidden) R.showArrow(best.from, best.to);
+    for (const id of ['reviewMine', 'reviewBetter']) $(id).disabled = false;
+  }
+  function endReview(showReport) {
+    if (!reviewState) return;
+    reviewAnim++;
+    game = reviewState.final; reviewState = null; phase = 'over';
+    const h = game.moveHistory[game.moveHistory.length - 1]; lastMove = h ? { from: h.from, to: h.to } : null;
+    R.showArrow(-1); $('reviewBar').hidden = true; showClocks(!!clock);
+    R.setPosition(game.board); refreshMarks(); renderMoves(); renderTrays();
+    setStatus('Game over');
+    if (showReport) { $('reportOverlay').hidden = false; renderReport(); }
+  }
+  function reportPgn() {
+    const final = finalGame(), me = 'You', bot = `Level ${level} ${LEVELS[level].name} (${LEVELS[level].elo})`;
+    const result = gameOver ? gameOver.result : '*';
+    return `[Event "Spellbound Chess"]\n[Site "https://luigicicciari.github.io/spellbound-chess/"]\n[Date "${new Date(gameStart).toISOString().slice(0, 10).replace(/-/g, '.')}"]\n`
+      + `[White "${playerColor === 'w' ? me : bot}"]\n[Black "${playerColor === 'b' ? me : bot}"]\n[Result "${result}"]\n\n${final.pgn()} ${result}\n`;
+  }
+  $('reportBtn').onclick = openReport;
+  $('reportClose').onclick = () => { $('reportOverlay').hidden = true; $('resultOverlay').hidden = false; };
+  $('reviewBack').onclick = () => endReview(true);
+  $('reviewMine').onclick = () => playLine('mine', false);
+  $('reviewBetter').onclick = () => playLine('better', false);
+  $('copyPgn').onclick = async () => {
+    try { await navigator.clipboard.writeText(reportPgn()); toast('PGN copied. Paste it into any chess site.'); }
+    catch (e) { toast('Copying is blocked here. Use Open in Lichess instead.'); }
+  };
+  $('lichessLink').onclick = () => { $('lichessLink').href = `https://lichess.org/analysis/pgn/${encodeURIComponent(finalGame().pgn())}?color=${playerColor === 'b' ? 'black' : 'white'}`; };
 
   /* ---------- name ---------- */
   const BLOCK = ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'bitch', 'whore', 'rape', 'nazi', 'hitler', 'porn', 'dick', 'cock', 'pussy', 'slut', 'retard'];
@@ -765,11 +962,12 @@
   function initClock() {
     if (settings.clock === 'off' || watching) { clock = null; showClocks(false); return; }
     const [mins, inc] = settings.clock.split('+').map(Number);
-    clock = { w: mins * 60000, b: mins * 60000, inc: inc * 1000, run: null, last: 0 };
+    clock = { w: mins * 60000, b: mins * 60000, inc: inc * 1000, run: null, last: 0 }; clockSnaps = [];
     showClocks(true); renderClock();
   }
   function showClocks(on) { $('clockMe').hidden = !on; $('clockThem').hidden = !on; }
-  function clockStart(side) { if (!clock || watching) return; clock.run = side; clock.last = performance.now(); renderClock(); }
+  let clockSnaps = [];  // both clocks at the start of each turn, so Undo can put the time back too
+  function clockStart(side) { if (!clock || watching) return; clockSnaps[game.sanHistory.length] = { w: clock.w, b: clock.b }; clock.run = side; clock.last = performance.now(); renderClock(); }
   function clockStop(mover, addInc) {
     if (!clock || !clock.run) return;
     clock[clock.run] -= performance.now() - clock.last;
@@ -815,6 +1013,8 @@
     if (!$('nameOverlay').hidden) $('nameCancel').click();
     else if (!$('confirmOverlay').hidden) $('confirmNo').click();
     else if (!$('helpOverlay').hidden) $('helpClose').click();
+    else if (!$('reportOverlay').hidden) $('reportClose').click();
+    else if (!$('reviewBar').hidden) endReview(true);
     else if (!$('promo').hidden && promoResolve) promoResolve(null);
     else if (!$('hintPanel').hidden) { $('hintPanel').hidden = true; R.showArrow(-1); }
     else if (selected !== null && phase === 'player') clearSelection();

@@ -95,5 +95,33 @@
     });
   }
 
-  root.SBStockfish = { load, bestMove, evaluate, reset, PATH };
+  /* Full-strength look at a position: score from the side to move (centipawns, mates ±10000) and the best move. */
+  function analyse(fen, movetimeMs) {
+    return queue(async () => {
+      await load();
+      send('setoption name UCI_LimitStrength value false');
+      send('isready'); await waitFor((l) => l === 'readyok', 10000);
+      let score = 0;
+      const fn = (line) => {
+        const mm = /score (cp|mate) (-?\d+)/.exec(line);
+        if (mm) score = mm[1] === 'cp' ? Number(mm[2]) : (Number(mm[2]) > 0 ? 10000 : -10000);
+      };
+      listeners.add(fn);
+      let line = '';
+      try {
+        send(`position fen ${fen}`);
+        send(`go movetime ${Math.max(60, Math.round(movetimeMs || 200))}`);
+        line = await waitFor((l) => l.startsWith('bestmove'), (movetimeMs || 200) + 10000);
+      } finally {
+        listeners.delete(fn);
+        send('setoption name UCI_LimitStrength value true');
+      }
+      const uci = line.split(/\s+/)[1];
+      const side = fen.split(' ')[1];
+      const best = uci && uci !== '(none)' ? { from: sq(uci.slice(0, 2)), to: sq(uci.slice(2, 4)), promotion: uci[4] ? (side === 'w' ? uci[4].toUpperCase() : uci[4].toLowerCase()) : null } : null;
+      return { score, best };
+    });
+  }
+
+  root.SBStockfish = { load, bestMove, evaluate, analyse, reset, PATH };
 })(window);

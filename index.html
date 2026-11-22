@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=0.7.1">
+  <link rel="stylesheet" href="style.css?v=0.8.0">
 </head>
 <body>
   <div class="app" id="app">
@@ -27,6 +27,14 @@
           <div id="board3d" class="board board3d" hidden></div>
           <svg id="board" class="board" role="img" aria-label="Chess board"></svg>
           <div class="piece-tip" id="pieceTip" hidden></div>
+          <div class="review-bar" id="reviewBar" hidden>
+            <span id="reviewText"></span>
+            <span class="review-btns">
+              <button class="btn" id="reviewMine">▶ Your move</button>
+              <button class="btn" id="reviewBetter">▶ Better move</button>
+              <button class="btn primary" id="reviewBack">Back to report</button>
+            </span>
+          </div>
           <div class="clock-badge them" id="clockThem" hidden>Stones 5:00</div>
           <div class="clock-badge me" id="clockMe" hidden>You 5:00</div>
           <button class="hint-btn" id="hintBtn" title="What do real players play here?" hidden>✦ Hint</button>
@@ -154,8 +162,29 @@
         <button class="btn primary" id="saveBtn">Save to leaderboard</button>
         <button class="btn" id="againBtn">Play again</button>
         <button class="btn" id="replayBtn">Replay moves</button>
+        <button class="btn" id="reportBtn">📜 Battle report</button>
       </div>
       <div class="small" id="saveNote"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="reportOverlay" hidden>
+    <div class="dialog report" role="dialog" aria-labelledby="reportTitle">
+      <div class="result-title" id="reportTitle">Battle report</div>
+      <div class="small" id="reportSub"></div>
+      <div class="report-stats" id="reportStats"></div>
+      <figure class="report-chart">
+        <figcaption>How the battle shifted <span class="small">· White's winning chances after each move (Stockfish)</span></figcaption>
+        <svg id="reportChart" viewBox="0 0 600 150" role="img" aria-label="Winning chances chart"></svg>
+      </figure>
+      <div class="small" id="reportProgress" aria-live="polite"></div>
+      <div class="report-moments" id="reportMoments"></div>
+      <p class="small report-note">Accuracy uses the Lichess-style formula: each move scores 100% if it keeps your winning chances, less the more it lowers them.</p>
+      <div class="dialog-buttons">
+        <button class="btn" id="copyPgn">Copy PGN</button>
+        <a class="btn" id="lichessLink" target="_blank" rel="noopener">Open in Lichess ↗</a>
+        <button class="btn primary" id="reportClose">Close</button>
+      </div>
     </div>
   </div>
 
@@ -203,6 +232,7 @@
       <ul>
         <li>Click one of your pieces, then click a glowing square. You can also drag, or type moves like <b>Nf3</b>.</li>
         <li>Just want to see the battles? Press <b>▶ Watch</b>.</li>
+        <li>After a game, open the <b>📜 Battle report</b>: a chart of who was winning, your accuracy, your biggest mistakes with the better move, and your best move replayed.</li>
         <li><b>Casual</b> is for practice: take moves back, ask for a hint, and see which of your pieces are attacked and undefended. <b>Rated</b> games count on the leaderboard, with no takebacks or hints. The mode is fixed once a game starts.</li>
         <li>Pick a computer level. Each level is 400 rating points stronger than the last; levels 4–7 are powered by Stockfish. Beating stronger stones earns more rating.</li>
         <li>The first time you finish a game, pick a name and how well you play; after that, rated games save to the <b>Leaderboard</b> automatically. You start even with the matching level (400, 800 or 1200). Ratings here come from games against the computer, so they're close to, but not the same as, chess.com or lichess ratings.</li>
@@ -217,20 +247,20 @@
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="config.js?v=0.7.1"></script>
-  <script src="rules.js?v=0.7.1"></script>
-  <script src="engine.js?v=0.7.1"></script>
-  <script src="audio.js?v=0.7.1"></script>
-  <script src="render.js?v=0.7.1"></script>
-  <script src="ladder.js?v=0.7.1"></script>
-  <script src="sf.js?v=0.7.1"></script>
+  <script src="config.js?v=0.8.0"></script>
+  <script src="rules.js?v=0.8.0"></script>
+  <script src="engine.js?v=0.8.0"></script>
+  <script src="audio.js?v=0.8.0"></script>
+  <script src="render.js?v=0.8.0"></script>
+  <script src="ladder.js?v=0.8.0"></script>
+  <script src="sf.js?v=0.8.0"></script>
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
   <script type="module">
     // Load the 3D board if the browser can; otherwise the flat board is used.
     try {
-      await Promise.race([import('./render3d.js?v=0.7.1'), new Promise((_, no) => setTimeout(() => no(new Error('3D load timed out')), 8000))]);
+      await Promise.race([import('./render3d.js?v=0.8.0'), new Promise((_, no) => setTimeout(() => no(new Error('3D load timed out')), 8000))]);
     } catch (e) { console.warn('Spellbound Chess: 3D board unavailable, using the flat board.', e); }
-    const s = document.createElement('script'); s.src = 'main.js?v=0.7.1'; document.body.appendChild(s);
+    const s = document.createElement('script'); s.src = 'main.js?v=0.8.0'; document.body.appendChild(s);
   </script>
 </body>
 </html>
