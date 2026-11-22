@@ -518,6 +518,7 @@ export function create(container) {
       if (!u.idling || u.busy) { br.x *= settle; br.y *= settle; br.z *= settle; u.idleY *= settle; } // ease back after an interrupted habit
       u.bob.position.y = Math.sin(tsec * 1.6 + u.phase) * 0.006 + u.idleY;
     }
+    for (const g of marksG.children) if (g.userData.gem) { g.rotation.y = tsec * 1.5; g.position.y += Math.sin(tsec * 3) * 0.0015; }
     if (now > nextIdle) { nextIdle = now + 3500 + Math.random() * 3500; idleHabit(); }
     const pulse = 1.2 + Math.sin(tsec * 6) * 1.1;
     MAT.w.rune.emissiveIntensity = thinking.w ? pulse : 2.2;
@@ -632,8 +633,9 @@ export function create(container) {
   const flat = (geo, mat, sq, y) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = -Math.PI / 2; const p = sqPos(sq); m.position.set(p.x, y || 0.012, p.z); marksG.add(m); return m; };
   const G = { tile: new THREE.PlaneGeometry(0.98, 0.98), dot: new THREE.CircleGeometry(0.1, 20), halo: new THREE.RingGeometry(0.1, 0.16, 24),
     ringCore: new THREE.RingGeometry(0.4, 0.44, 32), ringHalo: new THREE.RingGeometry(0.37, 0.48, 32), check: new THREE.RingGeometry(0.36, 0.46, 32), checkOut: new THREE.RingGeometry(0.33, 0.49, 32),
-    danger: new THREE.RingGeometry(0.38, 0.43, 6), dangerOut: new THREE.RingGeometry(0.36, 0.45, 6), dangerTri: new THREE.CircleGeometry(0.1, 3) };
-  const MK = { last: basic(0xF28E2B, 0.32), sel: basic(0x7FB8D8, 0.42), core: basic(0x1F4E79), halo: basic(0x8EC5E8), check: basic(0xF28E2B), outL: basic(0x2B2A2F), outD: basic(0xD8D2C4) };
+    danger: new THREE.RingGeometry(0.42, 0.48, 6), dangerOut: new THREE.RingGeometry(0.4, 0.5, 6), dangerTri: new THREE.CircleGeometry(0.1, 3),
+    dangerGem: new THREE.OctahedronGeometry(0.1) };
+  const MK = { gem: new THREE.MeshBasicMaterial({ color: 0xF28E2B }), last: basic(0xF28E2B, 0.32), sel: basic(0x7FB8D8, 0.42), core: basic(0x1F4E79), halo: basic(0x8EC5E8), check: basic(0xF28E2B), outL: basic(0x2B2A2F), outD: basic(0xD8D2C4) };
   let checkMesh = null;
   function mark(state) {
     for (const o of [...marksG.children]) marksG.remove(o);
@@ -644,7 +646,12 @@ export function create(container) {
       const light = ((s >> 3) + (s & 7)) % 2 === 0;
       flat(G.dangerOut, light ? MK.outL : MK.outD, s, 0.008);
       flat(G.danger, MK.check, s, 0.01);
-      const m = flat(G.dangerTri, MK.check, s, 0.011); const p = sqPos(s); m.position.x = p.x - 0.33; m.position.z = p.z - 0.33;
+      const m = flat(G.dangerTri, MK.check, s, 0.011); const p = sqPos(s); m.position.x = p.x - 0.36; m.position.z = p.z - 0.36;
+      // a floor ring hides under the piece's base in 3D, so a small orange diamond also floats over its head
+      const o = pieceAt.get(s);
+      const gem = new THREE.Mesh(G.dangerGem, MK.gem);
+      gem.position.set(p.x, (o ? o.userData.height : 1) + 0.22, p.z); gem.userData.gem = true;
+      marksG.add(gem);
     }
     if (selected !== undefined && selected !== null) flat(G.tile, MK.sel, selected, 0.006);
     if (check !== undefined && check !== null && check >= 0) {

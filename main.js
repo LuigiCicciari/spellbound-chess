@@ -53,7 +53,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.7.0');
+    worker = new Worker('engine.worker.js?v=0.7.1');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -317,7 +317,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.7.0',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.7.1',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
