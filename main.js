@@ -53,7 +53,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.8.1');
+    worker = new Worker('engine.worker.js?v=0.8.2');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -245,6 +245,7 @@
     R.mark({ lastMove: null });
     const byPlayer = !watching && colorOf(played.piece) === playerColor;
     const danger = byPlayer && game.attacked(played.to, game.turn);
+    if (!watching) setStatus(`${byPlayer ? 'You play' : 'Stones play'} ${played.san}…`); // no stale "Hint · Your move" while pieces move
     if (token === gameToken) await R.animateMove(played, { hesitate: danger, celebrate: true });
     if (token !== gameToken) return true;
     lastMove = { from: played.from, to: played.to };
@@ -322,18 +323,19 @@
     $('saveBtn').disabled = unrated; $('saveBtn').textContent = auto ? 'Saving…' : 'Save to leaderboard';
     $('saveNote').textContent = unrated ? 'Stockfish could not load during this game, so it can\'t be rated.' : auto ? '' : 'Choose a name to join the leaderboard. After that, rated games save automatically.';
     if (unrated) { el.textContent = 'Unrated game'; $('saveBtn').textContent = 'Not rated'; }
+    $('saveBtn').hidden = !rated();
     if (!rated()) { $('saveBtn').disabled = true; $('saveBtn').textContent = 'Casual game'; el.className = 'result-delta neutral'; el.textContent = 'Not rated'; $('saveNote').textContent = 'Switch to Rated before your next game to play for the leaderboard.'; }
     else if (game.sanHistory.length < 2) { $('saveBtn').disabled = true; $('saveBtn').textContent = 'Too short to rate'; el.textContent = ''; $('saveNote').textContent = ''; }
     $('reportBtn').hidden = game.sanHistory.length < 2;
     $('resultOverlay').hidden = false;
-    $('saveBtn').focus();
+    ($('saveBtn').hidden ? $('againBtn') : $('saveBtn')).focus();
   }
 
   function recordFor(res, reason) {
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.8.1',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.8.2',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -694,7 +696,7 @@
       }
       if (token !== reportToken) return;            // a new game or a new report took over
       report.evals[i] = r.w; report.best[i] = r.best;
-      $('reportProgress').textContent = `${report.src === 'sf' ? 'Stockfish' : 'The built-in engine'} is studying the battle… ${i} of ${n} moves`;
+      $('reportProgress').textContent = `${report.src === 'sf' ? 'Stockfish' : 'The built-in engine'} is studying the battle… move ${Math.ceil(i / 2)} of ${Math.ceil(n / 2)}`;
       if (i % 3 === 0 || i === n) renderReport();
       if (i % 10 === 0) store.set('spellbound.report', report); // progress survives a reload
     }
