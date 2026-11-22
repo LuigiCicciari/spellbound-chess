@@ -140,7 +140,14 @@
 
     function mark(state) {
       clearMarks();
-      const { lastMove, selected, targets, check, captures } = state || {};
+      const { lastMove, selected, targets, check, captures, danger } = state || {};
+      for (const s of danger || []) { // dashed orange ring + corner triangle: color, shape and the status text all say it
+        const [x, y] = xy(s);
+        const g = el('g', { class: isLight(s) ? 'on-light' : 'on-dark' }, marksG);
+        el('circle', { cx: x + 50, cy: y + 50, r: 40, class: 'danger-out' }, g);
+        el('circle', { cx: x + 50, cy: y + 50, r: 40, class: 'danger-ring' }, g);
+        el('path', { d: `M${x + 6} ${y + 6} h22 l-22 22 z`, class: 'danger-mark' }, g);
+      }
       if (lastMove) for (const s of [lastMove.from, lastMove.to]) { const [x, y] = xy(s); el('rect', { x, y, width: SQ, height: SQ, class: 'last' }, marksG); }
       if (selected !== undefined && selected !== null) { const [x, y] = xy(selected); el('rect', { x, y, width: SQ, height: SQ, class: 'sel' }, marksG); }
       if (check !== undefined && check !== null && check >= 0) {

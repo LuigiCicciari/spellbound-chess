@@ -19,18 +19,22 @@
   if (!profile.secret) profile.secret = randomHex(24);
   store.set('spellbound.profile', profile);
   const settings = Object.assign({ sound: true, seenHelp: false, level: 1, color: 'w', clock: 'off', speed: 'normal' }, store.get('spellbound.settings', {}));
+  if (!settings.mode) settings.mode = profile.handle ? 'rated' : 'casual'; // newcomers start in Casual
+  if (settings.danger === undefined) settings.danger = true;
   const saveSettings = () => store.set('spellbound.settings', settings);
 
   let game = new Game();
   let playerColor = 'w';
   let level = settings.level;
   let phase = 'idle'; // player | engine | animating | over | replay
-  let selected = null, pointerDownSq = null, dragStarted = false, downPos = null;
+  let selected = null, pointerDownSq = null, dragStarted = false, downPos = null, pendingCycle = null;
   let lastMove = null, gameOver = null, gameStart = Date.now(), savedThisGame = false;
   let book = null, ladderData = null, ladderTab = 'all';
   let promoResolve = null, confirmResolve = null; // open dialogs that must close when a game ends
   let gameToken = 0;
   let unrated = false;   // true if this game fell back from Stockfish to the built-in engine
+  let mode = settings.mode; // 'casual' | 'rated', fixed for the whole game once it starts
+  const rated = () => mode === 'rated';
   let clock = null;      // { w, b, inc, run, last } in ms when clock mode is on
 
   const svg = $('board');
@@ -49,7 +53,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.6.1');
+    worker = new Worker('engine.worker.js?v=0.7.0');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -104,6 +108,7 @@
   function refreshMarks(extra) {
     const st = Object.assign({ lastMove }, extra || {});
     st.check = game.inCheck() ? game.kingSquare(game.turn) : null;
+    st.danger = dangerSquares();
     R.mark(st);
     if (R.setTurn) R.setTurn(game.turn, game.inCheck());
   }
@@ -137,7 +142,33 @@
 
   function syncBoard(rebuild) { if (rebuild !== false || !R.is3D) R.setPosition(game.board); refreshMarks(); renderMoves(); renderTrays(); updateHint(); updateButtons(); }
 
+  /* Casual helper: your pieces (not the king) that the other side attacks and none of yours defend.
+     It's a simple count of attackers and defenders, not a full blunder check: pins and uneven trades aren't considered. */
+  function dangerSquares() {
+    if (rated() || !settings.danger || watching || !playerColor || phase === 'over' || phase === 'replay') return [];
+    const me = playerColor, them = me === 'w' ? 'b' : 'w', out = [];
+    for (let s = 0; s < 64; s++) {
+      const p = game.board[s];
+      if (p && colorOf(p) === me && typeOf(p) !== 'K' && game.attacked(s, them) && !game.attacked(s, me)) out.push(s);
+    }
+    return out;
+  }
+  function noteDanger() {
+    const d = dangerSquares();
+    if (d.length) $('status').textContent += ` · ⚠ ${d.length} piece${d.length > 1 ? 's' : ''} attacked and undefended`;
+  }
+  function updateMode() {
+    const started = game.sanHistory.length > 0 && !watching && phase !== 'over';
+    $('modeCasual').setAttribute('aria-checked', String(settings.mode === 'casual'));
+    $('modeRated').setAttribute('aria-checked', String(settings.mode === 'rated'));
+    $('modeCasual').closest('.mode-switch').classList.toggle('locked', started && settings.mode !== mode);
+    $('casualRow').hidden = mode !== 'casual';
+    $('dangerBtn').setAttribute('aria-pressed', String(!!settings.danger));
+  }
   function updateButtons() {
+    const casualTurn = mode === 'casual' && !watching && phase === 'player';
+    $('takebackBtn').disabled = !casualTurn || game.sanHistory.length < (playerColor === 'w' ? 2 : 3);
+    $('sfHintBtn').disabled = !casualTurn;
     const live = !watching && (phase === 'player' || phase === 'engine');
     $('drawBtn').disabled = !live || game.sanHistory.length < 2;
     $('resignBtn').disabled = watching || !['player', 'engine', 'animating'].includes(phase) || game.sanHistory.length < 1;
@@ -150,6 +181,7 @@
     R.setThinking('w', false); R.setThinking('b', false); R.showArrow(-1);
     game = new Game(); lastMove = null; gameOver = null; selected = null; savedThisGame = false; gameStart = Date.now();
     unrated = false;
+    mode = settings.mode; updateMode();
     watching = false; $('watchBtn').textContent = '▶ Watch';
     initClock();
     level = Number($('level').value);
@@ -195,7 +227,7 @@
     const played = game.move(spec);
     if (!played) return false;
     clockStop(mover, true);
-    phase = 'animating'; selected = null; updateButtons();
+    phase = 'animating'; selected = null; updateButtons(); R.showArrow(-1);
     R.mark({ lastMove: null });
     const byPlayer = !watching && colorOf(played.piece) === playerColor;
     const danger = byPlayer && game.attacked(played.to, game.turn);
@@ -214,7 +246,7 @@
     }
     if (game.inCheck()) { R.pulseCheck(); if (R.checkGuard) R.checkGuard(game.kingSquare(game.turn)); if (R.thunder) R.thunder(); }
     if (watching) { setStatus(`Watching · ${colorOf(played.piece) === 'w' ? 'Moonstone' : 'Obsidian'} played ${played.san}`); engineTurn(); }
-    else if (game.turn === playerColor) { phase = 'player'; setStatus(game.inCheck() ? 'Check! Your move' : `${moverName === 'Stones' ? 'Stones played ' + played.san + ' · ' : ''}Your move`, game.inCheck()); }
+    else if (game.turn === playerColor) { phase = 'player'; setStatus(game.inCheck() ? 'Check! Your move' : `${moverName === 'Stones' ? 'Stones played ' + played.san + ' · ' : ''}Your move`, game.inCheck()); refreshMarks(); noteDanger(); }
     else { engineTurn(); }
     updateButtons();
     return true;
@@ -248,7 +280,7 @@
     }
     if (playerWon) window.SBAudio.play('chime');
     showResult();
-    if (!unrated && profile.handle && profile.start && game.sanHistory.length >= 2) saveGame(); // rated games save themselves
+    if (rated() && !unrated && profile.handle && profile.start && game.sanHistory.length >= 2) saveGame(); // rated games save themselves
   }
 
   const REASONS = { checkmate: 'by checkmate', stalemate: 'by stalemate', threefold: 'by threefold repetition', fifty_move: 'by the 50-move rule',
@@ -275,7 +307,8 @@
     $('saveBtn').disabled = unrated; $('saveBtn').textContent = auto ? 'Saving…' : 'Save to leaderboard';
     $('saveNote').textContent = unrated ? 'Stockfish could not load during this game, so it can\'t be rated.' : auto ? '' : 'Choose a name to join the leaderboard. After that, rated games save automatically.';
     if (unrated) { el.textContent = 'Unrated game'; $('saveBtn').textContent = 'Not rated'; }
-    if (game.sanHistory.length < 2) { $('saveBtn').disabled = true; $('saveBtn').textContent = 'Too short to rate'; el.textContent = ''; $('saveNote').textContent = ''; }
+    if (!rated()) { $('saveBtn').disabled = true; $('saveBtn').textContent = 'Casual game'; el.className = 'result-delta neutral'; el.textContent = 'Not rated'; $('saveNote').textContent = 'Switch to Rated before your next game to play for the leaderboard.'; }
+    else if (game.sanHistory.length < 2) { $('saveBtn').disabled = true; $('saveBtn').textContent = 'Too short to rate'; el.textContent = ''; $('saveNote').textContent = ''; }
     $('resultOverlay').hidden = false;
     $('saveBtn').focus();
   }
@@ -284,7 +317,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.6.1',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.7.0',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -292,7 +325,7 @@
      mid-game still counts as a loss. It's cleared the moment the game ends normally. */
   const PENDING = 'spellbound.pending';
   function notePending() {
-    if (unrated) { clearPending(); return; }
+    if (unrated || !rated()) { clearPending(); return; }
     if (watching || !profile.handle || !profile.start || phase === 'over' || phase === 'replay' || game.sanHistory.length < 2) return;
     store.set(PENDING, recordFor('L', 'resign'));
   }
@@ -307,7 +340,7 @@
   }
 
   async function saveGame() {
-    if (savedThisGame || !gameOver) return;
+    if (savedThisGame || !gameOver || !rated()) return;
     if (!profile.handle || !profile.start) { const ok = await askName(); if (!ok) return; }
     const rec = recordFor(gameOver.res, gameOver.reason);
     if (rec.ply_count < 2) return;
@@ -394,20 +427,30 @@
   boardEl.addEventListener('pointerdown', (ev) => {
     window.SBAudio.unlock();
     if (phase !== 'player') return;
-    // The square under the pointer wins: tall pieces must never block the square (or piece) behind them.
     const hitSq = R.squareFromEvent(ev);
     const ground = R.groundSquareFromEvent ? R.groundSquareFromEvent(ev) : hitSq;
-    if (hitSq < 0 && ground < 0) return;
+    const stack = R.piecesUnderPointer ? R.piecesUnderPointer(ev) : (hitSq >= 0 && game.board[hitSq] ? [hitSq] : []);
+    if (hitSq < 0 && ground < 0 && !stack.length) return;
+    const own = (s) => s >= 0 && game.board[s] && colorOf(game.board[s]) === playerColor;
+    const ownStack = stack.filter(own);           // your pieces under the pointer, nearest first
     if (selected !== null) {
       const targets = legalFrom(selected).map((m) => m.to);
       // Clicking high up on one of your own pieces means "pick that piece instead", even if a target square is behind it.
-      const ownHigh = hitSq >= 0 && hitSq !== selected && game.board[hitSq] && colorOf(game.board[hitSq]) === playerColor
-        && (R.lastHitHeight ? R.lastHitHeight() > 0.45 : true);
-      const pick = ownHigh ? undefined : [ground, hitSq].find((s) => s >= 0 && s !== selected && targets.includes(s));
+      const ownHigh = ownStack.length && ownStack[0] !== selected && (R.lastHitHeight ? R.lastHitHeight() > 0.45 : true);
+      const pick = ownHigh ? undefined : [ground, ...stack.filter((s) => !own(s)), hitSq].find((s) => s >= 0 && s !== selected && targets.includes(s));
       if (pick !== undefined) { const from = selected; tryMove(from, pick); return; }
     }
-    const own = (s) => s >= 0 && game.board[s] && colorOf(game.board[s]) === playerColor;
-    const sq = own(ground) ? ground : own(hitSq) ? hitSq : (ground >= 0 ? ground : hitSq);
+    // What you click is what you get: the nearest of your pieces under the pointer. Clicking the same spot again
+    // picks the piece hidden behind it. With no piece under the pointer, the square on the floor decides.
+    let sq, cycle = false;
+    if (ownStack.length) {
+      const i = ownStack.indexOf(selected);
+      cycle = i >= 0 && ownStack.length > 1;
+      sq = ownStack[0];
+      if (cycle) pendingCycle = ownStack[(i + 1) % ownStack.length];
+    } else sq = own(ground) ? ground : (ground >= 0 ? ground : hitSq);
+    if (cycle) sq = selected;                      // keep it until pointerup: a drag still moves the selected piece
+    else pendingCycle = null;
     const p = game.board[sq];
     if (p && colorOf(p) === playerColor) {
       boardEl.setPointerCapture(ev.pointerId);
@@ -438,7 +481,12 @@
     if (pointerDownSq === null) return;
     const from = pointerDownSq; pointerDownSq = null;
     R.lift(from, false);
-    if (!dragStarted) return; // simple click: keep the selection
+    if (!dragStarted) { // simple click: keep the selection, or switch to the piece hidden behind it
+      const next = pendingCycle; pendingCycle = null;
+      if (next !== null && next !== from && phase === 'player') { showSelection(next); window.SBAudio.play('tap'); R.lift(next, true); R.lift(next, false); }
+      return;
+    }
+    pendingCycle = null;
     dragStarted = false;
     const to = R.groundSquareFromEvent ? R.groundSquareFromEvent(ev) : R.squareFromEvent(ev);
     R.endDrag(true);
@@ -462,7 +510,7 @@
   $('newBtn').onclick = async () => {
     if (watching) { newGame(); return; }
     if (['player', 'engine', 'animating', 'intro'].includes(phase) && game.sanHistory.length > 1) {
-      const ok = await confirmBox('Abandon this game?', profile.handle ? 'It counts as a loss on the leaderboard.' : 'It counts as a resignation.');
+      const ok = await confirmBox('Abandon this game?', rated() && profile.handle ? 'It counts as a loss on the leaderboard.' : 'It counts as a resignation.');
       if (!ok) return;
       gameToken++;
       await endGame(playerColor === 'w' ? '0-1' : '1-0', 'resign');
@@ -522,6 +570,46 @@
   $('soundBtn').onclick = () => { settings.sound = !settings.sound; saveSettings(); applySound(); };
   $('helpBtn').onclick = () => { $('helpOverlay').hidden = false; };
   $('helpClose').onclick = () => { $('helpOverlay').hidden = true; settings.seenHelp = true; saveSettings(); window.SBAudio.unlock(); };
+
+  /* ---------- Casual / Rated ---------- */
+  function setMode(m) {
+    if (settings.mode === m) return;
+    settings.mode = m; saveSettings();
+    const fresh = watching || phase === 'over' || game.sanHistory.length === 0;
+    if (fresh && !watching) { mode = m; refreshMarks(); toast(m === 'rated' ? 'Rated: this game counts on the leaderboard.' : 'Casual: practice freely. This game won\'t change your rating.'); }
+    else if (!watching) toast(`${m === 'rated' ? 'Rated' : 'Casual'} starts with your next game. This one stays ${mode === 'rated' ? 'Rated' : 'Casual'}.`);
+    updateMode(); updateButtons();
+  }
+  $('modeCasual').onclick = () => setMode('casual');
+  $('modeRated').onclick = () => setMode('rated');
+  $('dangerBtn').onclick = () => { settings.danger = !settings.danger; saveSettings(); updateMode(); refreshMarks(); };
+  $('takebackBtn').onclick = () => {
+    if (mode !== 'casual' || watching || phase !== 'player') return;
+    const n = game.sanHistory.length >= 2 && game.turn === playerColor ? 2 : 0; // your move and the stones' reply
+    if (!n || game.sanHistory.length - n < (playerColor === 'b' ? 1 : 0)) return;
+    gameToken++;
+    for (let i = 0; i < n; i++) game.undo();
+    const h = game.moveHistory[game.moveHistory.length - 1];
+    lastMove = h ? { from: h.from, to: h.to } : null;
+    selected = null; R.showArrow(-1);
+    syncBoard(true);
+    setStatus('Move taken back · Your move'); noteDanger();
+  };
+  $('sfHintBtn').onclick = async () => {
+    if (mode !== 'casual' || watching || phase !== 'player') return;
+    const token = gameToken, fen = game.fen();
+    $('sfHintBtn').disabled = true; setStatus('Looking for a good move…');
+    let mv = null;
+    try { if (window.SBStockfish) mv = await window.SBStockfish.bestMove(fen, 3190, 700); } catch (e) { mv = null; }
+    if (!mv) { const r = await askWorker({ fen, level: 3, sanHistory: game.sanHistory.slice(), book }); mv = r && r.move; }
+    if (token !== gameToken || phase !== 'player' || game.fen() !== fen) return;
+    updateButtons();
+    const probe = mv && game.move(mv);
+    if (!probe) { setStatus('No hint available · Your move'); return; }
+    game.undo();
+    R.showArrow(probe.from, probe.to);
+    setStatus(`Hint: ${probe.san} · Your move`);
+  };
 
   /* ---------- name ---------- */
   const BLOCK = ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'bitch', 'whore', 'rape', 'nazi', 'hitler', 'porn', 'dick', 'cock', 'pussy', 'slut', 'retard'];

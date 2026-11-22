@@ -15,7 +15,9 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 - Optional clock (10 min, 5 min, 3 min + 2 s) shown in the board's corners; Normal / Fast / Cinematic animations (Cinematic swoops the camera in for big captures)
 - Click, drag, or type moves (`Nf3`, `e2e4`)
 - Animated moves, captures, promotions, castling and checkmate, with synthesized stone sound effects
-- Elo rating: the first time you finish a game you pick a name and New (400), Casual (800) or A lot (1200); after that rated games save automatically. Ratings move fastest for your first 10 games. ALL TIME, TODAY and MINE leaderboard tabs
+- **Casual** and **Rated** modes. Casual is for practice: take back moves, ask Stockfish for a hint (shown as an arrow), and see which of your pieces are attacked and undefended. Rated games count on the leaderboard. The mode is fixed once a game starts; newcomers start in Casual.
+- Clicking a tall piece picks that piece; clicking the same spot again picks a shorter piece hidden behind it
+- Elo rating: the first time you finish a Rated game you pick a name and New (400), Sometimes (800) or A lot (1200); after that Rated games save automatically. Ratings move fastest for your first 10 games. ALL TIME, TODAY and MINE leaderboard tabs
 - At levels 4–7 Stockfish decides whether to accept a draw offer (offers open after move 20)
 - You pick the name that shows on the leaderboard and can change it with the ✎ button, which also shows a recovery code for using your rating on another device
 - Respects your system's reduced-motion setting

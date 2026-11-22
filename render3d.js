@@ -631,14 +631,21 @@ export function create(container) {
   const basic = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: opacity === undefined ? 1 : opacity, depthWrite: false });
   const flat = (geo, mat, sq, y) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = -Math.PI / 2; const p = sqPos(sq); m.position.set(p.x, y || 0.012, p.z); marksG.add(m); return m; };
   const G = { tile: new THREE.PlaneGeometry(0.98, 0.98), dot: new THREE.CircleGeometry(0.1, 20), halo: new THREE.RingGeometry(0.1, 0.16, 24),
-    ringCore: new THREE.RingGeometry(0.4, 0.44, 32), ringHalo: new THREE.RingGeometry(0.37, 0.48, 32), check: new THREE.RingGeometry(0.36, 0.46, 32), checkOut: new THREE.RingGeometry(0.33, 0.49, 32) };
+    ringCore: new THREE.RingGeometry(0.4, 0.44, 32), ringHalo: new THREE.RingGeometry(0.37, 0.48, 32), check: new THREE.RingGeometry(0.36, 0.46, 32), checkOut: new THREE.RingGeometry(0.33, 0.49, 32),
+    danger: new THREE.RingGeometry(0.38, 0.43, 6), dangerOut: new THREE.RingGeometry(0.36, 0.45, 6), dangerTri: new THREE.CircleGeometry(0.1, 3) };
   const MK = { last: basic(0xF28E2B, 0.32), sel: basic(0x7FB8D8, 0.42), core: basic(0x1F4E79), halo: basic(0x8EC5E8), check: basic(0xF28E2B), outL: basic(0x2B2A2F), outD: basic(0xD8D2C4) };
   let checkMesh = null;
   function mark(state) {
     for (const o of [...marksG.children]) marksG.remove(o);
     checkMesh = null;
-    const { lastMove, selected, targets, check, captures } = state || {};
+    const { lastMove, selected, targets, check, captures, danger } = state || {};
     if (lastMove) for (const s of [lastMove.from, lastMove.to]) flat(G.tile, MK.last, s, 0.004);
+    for (const s of danger || []) { // orange ring with a square-matched outline, plus a corner marker
+      const light = ((s >> 3) + (s & 7)) % 2 === 0;
+      flat(G.dangerOut, light ? MK.outL : MK.outD, s, 0.008);
+      flat(G.danger, MK.check, s, 0.01);
+      const m = flat(G.dangerTri, MK.check, s, 0.011); const p = sqPos(s); m.position.x = p.x - 0.33; m.position.z = p.z - 0.33;
+    }
     if (selected !== undefined && selected !== null) flat(G.tile, MK.sel, selected, 0.006);
     if (check !== undefined && check !== null && check >= 0) {
       const light = ((check >> 3) + (check & 7)) % 2 === 0;
@@ -672,6 +679,17 @@ export function create(container) {
       for (const [sq, obj] of pieceAt) if (obj === o) return sq;
     }
     return groundSquareFromEvent(ev);
+  }
+  /* Every piece the pointer's ray passes through, nearest first (a tall piece can hide a short one behind it). */
+  function piecesUnderPointer(ev) {
+    const r = el.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1), camera);
+    const out = [];
+    for (const h of ray.intersectObjects(piecesG.children, true)) {
+      let o = h.object; while (o && o.parent !== piecesG) o = o.parent;
+      for (const [sq, obj] of pieceAt) if (obj === o && !out.includes(sq)) out.push(sq);
+    }
+    return out;
   }
   /* The board square under the pointer, ignoring pieces (so tall pieces never block a target square). */
   function groundSquareFromEvent(ev) {
@@ -1121,7 +1139,7 @@ export function create(container) {
   return {
     el, is3D: true, setPosition, setOrientation, setView, mark, clearMarks, squareFromEvent, startDrag, moveDrag, endDrag, dragging,
     lift, relax, animateMove, topple, surrender, bow, pulseCheck, checkGuard, setThinking, showArrow,
-    flare, intro, setTurn, setAlert, thunder, groundSquareFromEvent, noticeThreats, setCinematic, lastHitHeight: () => lastHitY, setSpeed(f) { speed = f; }, get orientation() { return orient; }, get view() { return view; },
+    flare, intro, setTurn, setAlert, thunder, groundSquareFromEvent, piecesUnderPointer, noticeThreats, setCinematic, lastHitHeight: () => lastHitY, setSpeed(f) { speed = f; }, get orientation() { return orient; }, get view() { return view; },
   };
 }
 

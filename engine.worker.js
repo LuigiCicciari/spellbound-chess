@@ -1,5 +1,5 @@
 /* Runs the computer opponent off the main thread so the board never freezes. */
-importScripts('rules.js?v=0.6.1', 'engine.js?v=0.6.1');
+importScripts('rules.js?v=0.7.0', 'engine.js?v=0.7.0');
 self.onmessage = (e) => {
   const { id, kind, fen, level, sanHistory, book, color } = e.data;
   try {
