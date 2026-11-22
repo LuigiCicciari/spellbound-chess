@@ -69,6 +69,11 @@
       const o = c.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(55, t); o.frequency.exponentialRampToValueAtTime(30, t + 1.8);
       env(c, o, t, 0.1, 0.8, 0.9, 0.35); o.start(t); o.stop(t + 2);
     },
+    turn() {
+      const c = ensure(); if (!c) return; const t = c.currentTime;
+      const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = 880;
+      env(c, o, t, 0.01, 0.02, 0.5, 0.05); o.start(t); o.stop(t + 0.6);
+    },
     chime() {
       const c = ensure(); if (!c) return; const t = c.currentTime;
       [523.25, 659.25, 783.99].forEach((f, i) => {

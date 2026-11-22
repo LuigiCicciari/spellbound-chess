@@ -253,7 +253,7 @@ export function create(container) {
   const flameLayers = [[2.1, 3.6, 0xff3c0a, 0.55], [1.6, 2.9, 0xff6a1a, 0.7], [1.1, 2.0, 0xffa040, 0.85], [0.6, 1.15, 0xfff0c0, 0.95]];
   const FIRE_BASE = 0.8;
   const EMBER_TEX = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); const gr = g.createRadialGradient(16, 16, 0, 16, 16, 15); gr.addColorStop(0, 'rgba(255,230,170,1)'); gr.addColorStop(0.4, 'rgba(255,140,40,0.9)'); gr.addColorStop(1, 'rgba(255,80,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
-  for (const [x, z] of [[-5.7, -2.4], [5.7, -2.4], [-5.5, 0.4], [5.5, 0.4]]) {
+  for (const [x, z] of [[-5.5, -1.9], [5.5, -1.9]]) {
     mesh(new THREE.CylinderGeometry(0.34, 0.5, 0.9, 8), bowlStone, x, 0.08, z, scene);
     const bowl = mesh(new THREE.CylinderGeometry(0.62, 0.34, 0.34, 8, 1, true), bowlStone, x, 0.68, z, scene); bowl.material.side = THREE.DoubleSide;
     mesh(new THREE.CylinderGeometry(0.56, 0.56, 0.04, 8), new THREE.MeshBasicMaterial({ color: 0x5a1e06 }), x, 0.78, z, scene);
@@ -261,7 +261,7 @@ export function create(container) {
       const f = new THREE.Sprite(flameSprite(color, opacity));
       f.position.set(x, FIRE_BASE + h / 2 - 0.1, z); f.userData.h = h; f.userData.w = w; f.userData.x = x; scene.add(f); flames.push(f);
     }
-    const t = new THREE.PointLight(0xff9a40, 18, 13, 1.4); t.position.set(x, 1.8, z); scene.add(t); torches.push(t);
+    const t = new THREE.PointLight(0xff9a40, 26, 16, 1.3); t.position.set(x, 1.8, z); scene.add(t); torches.push(t);
     bowls.push(new THREE.Vector3(x, FIRE_BASE + 0.1, z));
   }
   function spawnEmber(b, fast) {
@@ -367,11 +367,12 @@ export function create(container) {
   const runeMat = new THREE.MeshBasicMaterial({ map: runeTex, color: 0x7FB8D8, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 });
   const runeCircle = new THREE.Mesh(new THREE.PlaneGeometry(15.5, 15.5), runeMat);
   runeCircle.rotation.x = -Math.PI / 2; runeCircle.position.y = -0.36; hall.add(runeCircle);
-  const inlayMat = new THREE.MeshBasicMaterial({ color: 0x7FB8D8, transparent: true, opacity: 0.8 });
-  for (const [x, z, w, d] of [[0, 4.62, 9.3, 0.04], [0, -4.62, 9.3, 0.04], [4.62, 0, 0.04, 9.3], [-4.62, 0, 0.04, 9.3]]) mesh(new THREE.BoxGeometry(w, 0.03, d), inlayMat, x, -0.03, z, hall).castShadow = false;
-  const runeState = { color: new THREE.Color(0x7FB8D8), target: new THREE.Color(0x7FB8D8), glow: 0.55, targetGlow: 0.55, flash: 0 };
+  const runeState = { color: new THREE.Color(0x7FB8D8), target: new THREE.Color(0x7FB8D8), glow: 0.85, targetGlow: 0.85, flash: 0, pulse: 0, side: 'w' };
   const TURN_COLORS = { w: 0x7FB8D8, b: 0xF28E2B };
-  function setTurn(side, inCheck) { runeState.target.setHex(inCheck ? 0xff6a1a : TURN_COLORS[side] || 0x7FB8D8); runeState.targetGlow = inCheck ? 0.95 : 0.55; }
+  function setTurn(side, inCheck) {
+    if (side !== runeState.side) { runeState.pulse = 1; runeState.side = side; audio('turn'); } // the circle flares when the turn passes
+    runeState.target.setHex(inCheck ? 0xff6a1a : TURN_COLORS[side] || 0x7FB8D8); runeState.targetGlow = inCheck ? 1.0 : 0.85;
+  }
   function setAlert(kind, side) { if (kind === 'mate') { runeState.target.setHex(TURN_COLORS[side] || 0xffffff); runeState.targetGlow = 1.4; flare(1.6); } }
   /* Thunder: the moonlight flashes twice and the hall rumbles. */
   const hemiLight = scene.children.find((o) => o.isHemisphereLight);
@@ -480,7 +481,7 @@ export function create(container) {
     MAT.w.rune.emissiveIntensity = thinking.w ? pulse : 2.2;
     MAT.b.rune.emissiveIntensity = thinking.b ? pulse : 2.2;
     fireBoost *= Math.pow(0.25, dt);
-    torches.forEach((t, i) => { t.intensity = 17 + Math.sin(tsec * 9 + i * 2) * 2.2 + Math.sin(tsec * 23 + i) * 1.5 + fireBoost * 30; });
+    torches.forEach((t, i) => { t.intensity = 25 + Math.sin(tsec * 9 + i * 2) * 3 + Math.sin(tsec * 23 + i) * 2 + fireBoost * 40; });
     flames.forEach((f, i) => {
       const k = 1 + Math.sin(tsec * 11 + i * 1.7) * 0.12 + Math.sin(tsec * 27 + i) * 0.07 + fireBoost * 0.7;
       const w = 1 / Math.sqrt(k) + fireBoost * 0.15;
@@ -525,12 +526,13 @@ export function create(container) {
     for (let i = 0; i < MOTES; i++) { mp[i * 3 + 1] += dt * 0.08; mp[i * 3] += Math.sin(tsec * 0.5 + moteSeed[i]) * dt * 0.06; if (mp[i * 3 + 1] > 6) mp[i * 3 + 1] = 0; }
     moteGeo.attributes.position.needsUpdate = true;
     banners.forEach((b, i) => { b.rotation.y = Math.sin(tsec * 0.7 + i * 2) * 0.06; b.rotation.x = Math.sin(tsec * 0.9 + i) * 0.03; });
-    runeState.color.lerp(runeState.target, 1 - Math.pow(0.02, dt));
+    runeState.color.lerp(runeState.target, 1 - Math.pow(0.0005, dt));
     runeState.glow += (runeState.targetGlow - runeState.glow) * (1 - Math.pow(0.02, dt));
     const breathe = 0.85 + Math.sin(tsec * 1.4) * 0.15;
-    runeMat.color.copy(runeState.color); runeMat.opacity = Math.min(1, runeState.glow * breathe);
-    inlayMat.color.copy(runeState.color); inlayMat.opacity = Math.min(1, 0.45 + runeState.glow * 0.5);
-    runeCircle.rotation.z += dt * 0.03;
+    runeState.pulse *= Math.pow(0.12, dt);
+    runeMat.color.copy(runeState.color); runeMat.opacity = Math.min(1, runeState.glow * breathe + runeState.pulse * 0.8);
+    const sc = 1 + runeState.pulse * 0.04; runeCircle.scale.set(sc, sc, 1);
+    runeCircle.rotation.z += dt * (0.03 + runeState.pulse * 0.6);
     beamMat.opacity = 0.32 + runeState.flash * 0.9;
     if (hemiLight) hemiLight.intensity = 1.35 + runeState.flash * 3.5;
     // camera (smooth follow + impact shake)
