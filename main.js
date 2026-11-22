@@ -49,7 +49,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.5.0');
+    worker = new Worker('engine.worker.js?v=0.6.0');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }

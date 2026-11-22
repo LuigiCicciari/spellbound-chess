@@ -9,7 +9,7 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 ## Features
 
 - A 3D stone battlefield: original carved warriors that march, fight and shatter (flat 2D board as an automatic fallback; add `?flat` to the address to force it)
-- Personality: pieces stand to attention, hesitate when sent into danger, turn to watch a new threat, celebrate captures, and the king kneels in surrender
+- Personality: every piece type has idle habits (pawns glance around, knights paw the ground, rooks settle their weight, bishops sway, the queen surveys the board, the king leans on his sword) and its own reaction when attacked (a pawn flinches, a knight rears, a rook braces, the queen squares up). Pieces also stand to attention, hesitate when sent into danger, celebrate captures, and the king kneels in surrender
 - ▶ Watch mode: the computer plays itself so you can enjoy the battles without playing
 - Seven computer levels, each 400 rating points apart: Apprentice (400), Adept (800), Master (1200) use the game's own engine; Archmage (1600), Grand Archmage (2000), Elder (2400), Eternal (2800) use Stockfish
 - Optional clock (10 min, 5 min, 3 min + 2 s) shown in the board's corners; Normal / Fast / Cinematic animations (Cinematic swoops the camera in for big captures)

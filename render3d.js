@@ -226,6 +226,7 @@ function buildPiece(type, side, MAT) {
       break;
     }
   }
+  bob.rotation.order = 'YXZ';
   bob.name = 'bob'; body.name = 'body'; head.name = 'head'; if (weapon !== head) weapon.name = 'weapon';
   root.userData = { type, side, bob, body, head, weapon, height: height * 1.12, baseWeaponRot: weapon.rotation.clone(), phase: Math.random() * 10, facing: side === 'w' ? Math.PI : 0 };
   root.rotation.y = root.userData.facing;
@@ -446,10 +447,10 @@ export function create(container) {
   /* ---------- tweens and particles ---------- */
   const tasks = new Set();
   let speed = 1; // 1 = Normal, 0.55 = Fast
-  function tween(ms, fn, easing) {
+  function tween(ms, fn, easing, idle) {
     ms *= speed;
     if (reducedMotion()) ms = Math.min(ms, 120);
-    return new Promise((res) => tasks.add({ t0: performance.now(), ms: Math.max(1, ms), fn, e: easing || ease.inOut, res }));
+    return new Promise((res) => tasks.add({ t0: performance.now(), ms: Math.max(1, ms), fn, e: easing || ease.inOut, res, idle: !!idle }));
   }
   const shards = [], dusts = [];
   const DUST_TEX = dustTexture();
@@ -496,11 +497,12 @@ export function create(container) {
   /* ---------- main loop ---------- */
   const clock = new THREE.Clock();
   let thinking = { w: false, b: false };
-  let hitStopUntil = 0, frameNo = 0, camOverride = null, cinematic = false;
+  let hitStopUntil = 0, frameNo = 0, camOverride = null, cinematic = false, nextIdle = performance.now() + 4000;
   function frame() {
     requestAnimationFrame(frame);
     // when nothing is moving, draw every other frame (30 fps): cooler laptops, longer phone batteries
-    const busy = tasks.size > 0 || shards.length > 0 || drag || camOverride || shakeAmp > 0.002;
+    let moving = false; for (const t of tasks) if (!t.idle) { moving = true; break; } // idle habits are slow enough for 30 fps
+    const busy = moving || shards.length > 0 || drag || camOverride || shakeAmp > 0.002;
     if (!busy && (++frameNo & 1)) return;
     const dt = Math.min(0.05, clock.getDelta()), now = performance.now(), tsec = now / 1000;
     if (now < hitStopUntil) { for (const t of tasks) t.t0 += dt * 1000; } // hit-stop: everything freezes for a split second on impact
@@ -510,10 +512,13 @@ export function create(container) {
       if (p >= 1) { tasks.delete(t); t.res(); }
     }
     // idle breathing and rune glow
+    const settle = Math.pow(0.02, dt);
     for (const obj of pieceAt.values()) {
-      const u = obj.userData;
-      u.bob.position.y = Math.sin(tsec * 1.6 + u.phase) * 0.006;
+      const u = obj.userData, br = u.bob.rotation;
+      if (!u.idling) { br.x *= settle; br.y *= settle; br.z *= settle; u.idleY *= settle; } // ease back after an interrupted habit
+      u.bob.position.y = Math.sin(tsec * 1.6 + u.phase) * 0.006 + u.idleY;
     }
+    if (now > nextIdle) { nextIdle = now + 1800 + Math.random() * 2600; idleHabit(); }
     const pulse = 1.2 + Math.sin(tsec * 6) * 1.1;
     MAT.w.rune.emissiveIntensity = thinking.w ? pulse : 2.2;
     MAT.b.rune.emissiveIntensity = thinking.b ? pulse : 2.2;
@@ -609,7 +614,7 @@ export function create(container) {
     const u = c.userData;
     u.bob = c.getObjectByName('bob'); u.body = c.getObjectByName('body'); u.head = c.getObjectByName('head');
     u.weapon = u.weaponIsHead ? u.head : c.getObjectByName('weapon');
-    u.baseWeaponRot = u.weapon.rotation.clone(); u.phase = Math.random() * 10;
+    u.baseWeaponRot = u.weapon.rotation.clone(); u.phase = Math.random() * 10; u.idleY = 0; u.idling = false;
     return c;
   }
   function setPosition(board) { clearPieces(); board.forEach((p, sq) => { if (p) place(p, sq); }); }
@@ -715,7 +720,7 @@ export function create(container) {
   }
 
   async function celebrate(obj) {
-    const u = obj.userData, w = u.weapon, r0 = w.rotation.clone();
+    const u = obj.userData, w = u.weapon, r0 = u.baseWeaponRot;
     await tween(420, (t) => {
       const k = Math.sin(t * Math.PI);
       u.body.position.y = k * 0.14;
@@ -838,7 +843,8 @@ export function create(container) {
         break;
     }
     if (!impact) hitReact(victim, att);
-    await tween(220, (t) => { w.rotation.x = lerp(w.rotation.x, r0.x, t); w.rotation.z = lerp(w.rotation.z, r0.z, t); b.rotation.x = lerp(b.rotation.x, 0, t); b.rotation.y = lerp(b.rotation.y, 0, t); });
+    const wx = w.rotation.x, wz = w.rotation.z, bx = b.rotation.x, by = b.rotation.y;
+    await tween(220, (t) => { w.rotation.x = lerp(wx, r0.x, t); w.rotation.z = lerp(wz, r0.z, t); b.rotation.x = lerp(bx, 0, t); b.rotation.y = lerp(by, 0, t); });
     w.rotation.copy(r0);
   }
 
@@ -866,22 +872,65 @@ export function create(container) {
     tween(260, (t) => { sp.scale.setScalar(0.2 + 1.3 * ease.out(t)); sp.material.opacity = 1 - t; }, ease.linear).then(() => { fxG.remove(sp); sp.material.dispose(); });
   }
 
-  /* Pieces that are newly attacked turn their heads toward the threat, then settle. */
+  /* ---------- habits and reactions (they move only the "bob" group, so they never fight a move or an attack) ---------- */
+  function lean(o, ms, fn) {
+    const u = o.userData, br = u.bob.rotation, myGen = gen;
+    u.idling = true;
+    return tween(ms, (t) => {
+      if (u.busy || gen !== myGen) return;  // a real move took over: the frame loop eases the pose back
+      const p = fn(t); br.y = p.yaw || 0; br.x = p.pitch || 0; br.z = p.roll || 0; u.idleY = p.y || 0;
+    }, ease.linear, true).then(() => { u.idling = false; });
+  }
+  const bell = (t, a, b) => (t <= a ? ease.inOut(t / a) : t >= b ? 1 - ease.inOut((t - b) / (1 - b)) : 1); // rise, hold, fall
+  // yaw (relative to the piece's facing) that points it at a target
+  function yawTo(o, target) {
+    const w = Math.atan2(target.x - o.position.x, target.z - o.position.z) - o.rotation.y;
+    return Math.atan2(Math.sin(w), Math.cos(w));
+  }
+  const clampYaw = (y, m) => Math.max(-m, Math.min(m, y));
+
+  /* Newly attacked pieces react in character: a pawn flinches, a knight rears, a rook braces, a bishop sways back, the queen squares up. */
   function noticeThreats(attackerSq, targets) {
     if (reducedMotion() || !targets || !targets.length) return;
     const a = pieceAt.get(attackerSq); if (!a) return;
-    const myGen = gen;
     for (const sq of targets.slice(0, 4)) {
-      const o = pieceAt.get(sq); if (!o || o.userData.busy) continue;
-      const h = o.userData.head || o.userData.body;
-      const dx = a.position.x - o.position.x, dz = a.position.z - o.position.z;
-      let want = Math.atan2(dx, dz) - o.rotation.y;
-      want = Math.atan2(Math.sin(want), Math.cos(want));
-      want = Math.max(-1.1, Math.min(1.1, want));
-      const r0 = h.rotation.y;
-      tween(260, (t) => { if (gen === myGen) h.rotation.y = lerp(r0, want, t); })
-        .then(() => sleep(1100 * speed))
-        .then(() => gen === myGen && tween(380, (t) => { if (gen === myGen) h.rotation.y = lerp(want, 0, t); }));
+      const o = pieceAt.get(sq); if (!o || o.userData.busy || o.userData.idling) continue;
+      const yaw = clampYaw(yawTo(o, a.position), 1.2);
+      switch (o.userData.type) {
+        case 'P': lean(o, 1300, (t) => { const k = bell(t, 0.12, 0.7); return { yaw: yaw * 0.6 * k, pitch: -0.24 * k, y: -0.02 * k, roll: Math.sin(t * 40) * 0.025 * k }; }); break;
+        case 'N': lean(o, 1300, (t) => { const k = bell(t, 0.2, 0.65); return { yaw: yaw * k, pitch: -0.42 * Math.sin(Math.min(1, t / 0.45) * Math.PI) * 1 + 0.05 * k, y: 0.06 * Math.sin(Math.min(1, t / 0.45) * Math.PI) }; }); break;
+        case 'R': lean(o, 1400, (t) => { const k = bell(t, 0.15, 0.75); return { yaw: yaw * 0.8 * k, pitch: 0.1 * k, y: -0.04 * k }; }); break;
+        case 'B': lean(o, 1400, (t) => { const k = bell(t, 0.2, 0.7); return { yaw: yaw * 0.7 * k, pitch: -0.12 * k, roll: Math.sin(t * Math.PI * 2) * 0.06 * k }; }); break;
+        case 'Q': lean(o, 1500, (t) => { const k = bell(t, 0.25, 0.75); return { yaw: yaw * k, pitch: 0.12 * k, y: 0.02 * k }; }); break;
+      }
+    }
+  }
+
+  /* Every few seconds one idle piece shows a habit of its own. */
+  function idleHabit() {
+    if (reducedMotion() || drag) return;
+    for (const t of tasks) if (!t.idle) return; // never during a move
+    const idle = [...pieceAt.values()].filter((o) => !o.userData.busy && !o.userData.idling);
+    if (idle.length < pieceAt.size - 2) return; // keep it to one or two at a time
+    if (!idle.length) return;
+    const o = idle[Math.floor(Math.random() * idle.length)];
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    switch (o.userData.type) {
+      case 'P': // looks around, a little nervous
+        lean(o, 1500, (t) => ({ yaw: dir * 0.45 * Math.sin(t * Math.PI * 2) * (1 - t * 0.3), roll: Math.sin(t * Math.PI * 6) * 0.015 })); break;
+      case 'N': // paws the ground, then tosses its head
+        lean(o, 1400, (t) => t < 0.6
+          ? { pitch: 0.14 * Math.abs(Math.sin(t / 0.6 * Math.PI * 2)), y: -0.01 * Math.abs(Math.sin(t / 0.6 * Math.PI * 2)) }
+          : { pitch: -0.16 * Math.sin((t - 0.6) / 0.4 * Math.PI), roll: dir * 0.08 * Math.sin((t - 0.6) / 0.4 * Math.PI) }); break;
+      case 'B': // a slow, thoughtful sway
+        lean(o, 2200, (t) => ({ roll: dir * 0.07 * Math.sin(t * Math.PI * 2), yaw: dir * 0.12 * Math.sin(t * Math.PI) })); break;
+      case 'R': // shifts and settles its weight with a thud
+        lean(o, 1000, (t) => ({ y: 0.035 * Math.sin(Math.min(1, t / 0.55) * Math.PI), roll: dir * 0.03 * Math.sin(t * Math.PI) }))
+          .then(() => { if (!o.userData.busy && o.parent) puff(o.position, 2, 0.35); }); break;
+      case 'Q': // surveys the battlefield
+        lean(o, 2600, (t) => ({ yaw: dir * 0.6 * bell(t, 0.3, 0.7) * Math.sin(Math.PI * 0.5 + (t - 0.5) * 0.6) })); break;
+      case 'K': // shifts his weight on the sword
+        lean(o, 2000, (t) => ({ roll: dir * 0.06 * Math.sin(t * Math.PI), pitch: 0.04 * Math.sin(t * Math.PI), y: -0.012 * Math.sin(t * Math.PI) })); break;
     }
   }
 
@@ -907,6 +956,7 @@ export function create(container) {
     const capSq = m.flags === 'e' ? m.to + (m.piece === 'P' ? 8 : -8) : m.to;
     const victim = m.captured ? pieceAt.get(capSq) : null;
     const dest = sqPos(m.to);
+    let celebrating = null;
 
     if (opts.hesitate && !reducedMotion()) { await hesitate(obj); if (stale()) return; }
     await faceTo(obj, dest, 200);                                  // 1 anticipation
@@ -947,7 +997,7 @@ export function create(container) {
       if (stale()) return;
       await travel(obj, m.from, dest, type === 'N' ? 'P' : type);
       if (stale()) return;
-      if (opts.celebrate !== false) celebrate(obj);
+      if (opts.celebrate !== false) celebrating = celebrate(obj);
     } else {
       if (victim) { victim.visible = false; piecesG.remove(victim); pieceAt.delete(capSq); }
       await travel(obj, m.from, dest, type);
@@ -964,10 +1014,12 @@ export function create(container) {
       np.position.y = -0.9; puff(dest, 12, 0.8); audio('grind', 0.6);
       await tween(560, (t) => { np.position.y = -0.9 + 0.9 * ease.back(t); });
       np.position.y = 0;
-      celebrate(np);
+      np.userData.busy = true;
+      await celebrate(np);
+      np.userData.busy = false;
       return;
     }
-    await faceRest(obj, 260);                                     // 6 recovery
+    await Promise.all([faceRest(obj, 260), celebrating]);         // 6 recovery (the cheer and the turn back run together)
     obj.userData.busy = false;
   }
 
