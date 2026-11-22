@@ -16,7 +16,7 @@
   /* ---------- state ---------- */
   const profile = store.get('spellbound.profile', null) || { player_id: uuid(), handle: '' };
   store.set('spellbound.profile', profile);
-  const settings = Object.assign({ sound: true, seenHelp: false, level: 1, color: 'w' }, store.get('spellbound.settings', {}));
+  const settings = Object.assign({ sound: true, seenHelp: false, level: 1, color: 'w', clock: 'off', speed: 'normal' }, store.get('spellbound.settings', {}));
   const saveSettings = () => store.set('spellbound.settings', settings);
 
   let game = new Game();
@@ -27,6 +27,8 @@
   let lastMove = null, gameOver = null, gameStart = Date.now(), savedThisGame = false;
   let book = null, allGames = [], ladderData = null, ladderTab = 'all';
   let gameToken = 0;
+  let unrated = false;   // true if this game fell back from Stockfish to the built-in engine
+  let clock = null;      // { w, b, inc, run, last } in ms when clock mode is on
 
   const svg = $('board');
   const webglOK = () => { try { const c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); } catch (e) { return false; } };
@@ -44,11 +46,26 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.3.3');
+    worker = new Worker('engine.worker.js?v=0.4.0');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
-  function askEngine(payload) {
+  async function askEngine(payload) {
+    const L = LEVELS[payload.level];
+    if (payload.kind !== 'eval' && L && L.stockfish && window.SBStockfish && !unrated) {
+      try {
+        const left = clock ? clock[game.turn] : Infinity;
+        const movetime = Math.max(150, Math.min(900, left / 40));
+        const move = await window.SBStockfish.bestMove(payload.fen, L.elo, movetime);
+        if (move) return { move };
+      } catch (e) {
+        unrated = true;
+        toast('Stockfish could not load, so the built-in engine is playing. This game won\'t be rated.', 4500);
+      }
+    }
+    return askWorker(payload);
+  }
+  function askWorker(payload) {
     return new Promise((resolve) => {
       if (worker) {
         const id = ++reqId; pending.set(id, resolve);
@@ -128,7 +145,9 @@
     $('resultOverlay').hidden = true; $('promo').hidden = true; $('hintPanel').hidden = true;
     R.setThinking('w', false); R.setThinking('b', false); R.showArrow(-1);
     game = new Game(); lastMove = null; gameOver = null; selected = null; savedThisGame = false; gameStart = Date.now();
+    unrated = false;
     watching = false; $('watchBtn').textContent = '▶ Watch';
+    initClock();
     level = Number($('level').value);
     const c = $('color').value;
     playerColor = c === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : c;
@@ -139,6 +158,7 @@
       await R.intro();
       if (token !== gameToken) return;
     }
+    clockStart(game.turn);
     if (game.turn === playerColor) { phase = 'player'; setStatus('Your move'); }
     else { phase = 'engine'; engineTurn(); }
     updateButtons();
@@ -162,8 +182,10 @@
 
   async function playMove(spec) {
     const token = gameToken;
+    const mover = game.turn;
     const played = game.move(spec);
     if (!played) return false;
+    clockStop(mover, true);
     phase = 'animating'; selected = null; updateButtons();
     R.mark({ lastMove: null });
     const byPlayer = !watching && colorOf(played.piece) === playerColor;
@@ -172,19 +194,20 @@
     if (token !== gameToken) return true;
     lastMove = { from: played.from, to: played.to };
     syncBoard(false);
-    const mover = colorOf(played.piece) === playerColor ? 'You' : 'Stones';
+    const moverName = colorOf(played.piece) === playerColor ? 'You' : 'Stones';
     const st = game.status();
     if (st) { await endGame(st.result, st.reason); return true; }
+    clockStart(game.turn);
     if (game.inCheck()) { R.pulseCheck(); if (R.checkGuard) R.checkGuard(game.kingSquare(game.turn)); if (R.thunder) R.thunder(); }
     if (watching) { setStatus(`Watching · ${colorOf(played.piece) === 'w' ? 'Moonstone' : 'Obsidian'} played ${played.san}`); engineTurn(); }
-    else if (game.turn === playerColor) { phase = 'player'; setStatus(game.inCheck() ? 'Check! Your move' : `${mover === 'Stones' ? 'Stones played ' + played.san + ' · ' : ''}Your move`, game.inCheck()); }
+    else if (game.turn === playerColor) { phase = 'player'; setStatus(game.inCheck() ? 'Check! Your move' : `${moverName === 'Stones' ? 'Stones played ' + played.san + ' · ' : ''}Your move`, game.inCheck()); }
     else { engineTurn(); }
     updateButtons();
     return true;
   }
 
   async function endGame(result, reason) {
-    phase = 'over'; selected = null; updateButtons();
+    phase = 'over'; selected = null; updateButtons(); clockStop(null, false);
     R.setThinking('w', false); R.setThinking('b', false);
     const playerWon = (result === '1-0' && playerColor === 'w') || (result === '0-1' && playerColor === 'b');
     const draw = result === '1/2-1/2';
@@ -197,7 +220,7 @@
     } else if (draw) {
       setStatus('Draw');
       await R.bow([game.kingSquare('w'), game.kingSquare('b')]);
-    } else setStatus(playerWon ? 'You win' : 'You resigned');
+    } else setStatus(reason === 'timeout' ? (playerWon ? 'The stones ran out of time' : 'You ran out of time') : (playerWon ? 'You win' : 'You resigned'));
     if (watching) {
       const token = gameToken;
       setStatus(`${draw ? 'Draw' : (result === '1-0' ? 'Moonstone' : 'Obsidian') + ' wins'} ${REASONS[reason] || ''} · next battle soon…`);
@@ -210,11 +233,11 @@
   }
 
   const REASONS = { checkmate: 'by checkmate', stalemate: 'by stalemate', threefold: 'by threefold repetition', fifty_move: 'by the 50-move rule',
-    insufficient: 'by insufficient material', resign: 'by resignation', draw_agreed: 'by agreement' };
+    insufficient: 'by insufficient material', resign: 'by resignation', draw_agreed: 'by agreement', timeout: 'on time' };
 
   function myStats() {
     const p = ladderData && ladderData.players.get(profile.player_id);
-    return p || { rating: window.SBLadder.START, games: 0, w: 0, d: 0, l: 0, history: [], best: 0 };
+    return p || { rating: profile.start || window.SBLadder.START, games: 0, w: 0, d: 0, l: 0, history: [], best: 0 };
   }
 
   function showResult() {
@@ -226,19 +249,21 @@
     const el = $('resultDelta');
     el.className = 'result-delta ' + (d > 0.5 ? 'good' : d < -0.5 ? 'alert' : 'neutral');
     el.textContent = `${d > 0.5 ? '▲ +' : d < -0.5 ? '▼ −' : '■ ±'}${Math.abs(Math.round(d))} if saved`;
-    $('saveBtn').disabled = false; $('saveBtn').textContent = 'Save to ladder';
-    $('saveNote').textContent = '';
+    $('saveBtn').disabled = unrated; $('saveBtn').textContent = 'Save to ladder';
+    $('saveNote').textContent = unrated ? 'Stockfish could not load during this game, so it can\'t be rated.' : '';
+    if (unrated) el.textContent = 'Unrated game';
     $('resultOverlay').hidden = false;
     $('saveBtn').focus();
   }
 
   async function saveGame() {
     if (savedThisGame || !gameOver) return;
-    if (!profile.handle) { const ok = await askName(); if (!ok) return; }
+    if (!profile.handle || !profile.start) { const ok = await askName(); if (!ok) return; }
     const rec = {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: gameOver.res, termination: gameOver.reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.1.0',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.4.0',
+      start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
     if (!window.SBLadder.verify(rec)) { $('saveNote').textContent = 'This game could not be verified, so it was not saved.'; return; }
     $('saveBtn').disabled = true; $('saveBtn').textContent = 'Saving…';
@@ -319,8 +344,12 @@
     if (phase !== 'player') return;
     const sq = R.squareFromEvent(ev); if (sq < 0) return;
     const p = game.board[sq];
-    if (selected !== null && selected !== sq && legalFrom(selected).some((m) => m.to === sq)) {
-      const from = selected; tryMove(from, sq); return;
+    if (selected !== null) {
+      // a tall piece can hide the square behind it: if the square under the pointer is a legal target, use it
+      const ground = R.groundSquareFromEvent ? R.groundSquareFromEvent(ev) : sq;
+      const targets = legalFrom(selected).map((m) => m.to);
+      const pick = [sq, ground].find((s) => s >= 0 && s !== selected && targets.includes(s));
+      if (pick !== undefined) { const from = selected; tryMove(from, pick); return; }
     }
     if (p && colorOf(p) === playerColor) {
       boardEl.setPointerCapture(ev.pointerId);
@@ -353,7 +382,7 @@
     R.lift(from, false);
     if (!dragStarted) return; // simple click: keep the selection
     dragStarted = false;
-    const to = R.squareFromEvent(ev);
+    const to = R.groundSquareFromEvent ? R.groundSquareFromEvent(ev) : R.squareFromEvent(ev);
     R.endDrag(true);
     if (to >= 0 && to !== from && legalFrom(from).some((m) => m.to === to)) await tryMove(from, to);
   });
@@ -401,6 +430,7 @@
     $('resultOverlay').hidden = true; $('promo').hidden = true; $('hintPanel').hidden = true;
     game = new Game(); lastMove = null; gameOver = null; selected = null;
     watching = true; playerColor = null; level = Number($('level').value);
+    unrated = false; clock = null; $('clocks').hidden = true;
     $('watchBtn').textContent = '■ Stop';
     R.setOrientation(R.orientation || 'w', game.board);
     syncBoard();
@@ -439,12 +469,18 @@
   function askName() {
     return new Promise((resolve) => {
       $('nameInput').value = profile.handle || ''; $('nameError').textContent = ''; $('nameOverlay').hidden = false; $('nameInput').focus();
+      const hasGames = !!(ladderData && ladderData.players.get(profile.player_id));
+      $('startChoice').hidden = hasGames || !!profile.start;
+      document.querySelectorAll('input[name=start]').forEach((r) => { r.checked = Number(r.value) === (profile.start || 800); });
       $('nameForm').onsubmit = (ev) => {
         ev.preventDefault();
         const n = $('nameInput').value.trim(), problem = nameProblem(n);
         if (problem) { $('nameError').textContent = problem; return; }
         const renamed = profile.handle && profile.handle !== n;
-        profile.handle = n; store.set('spellbound.profile', profile);
+        profile.handle = n;
+        if (!$('startChoice').hidden) { const pick = document.querySelector('input[name=start]:checked'); profile.start = pick ? Number(pick.value) : 800; }
+        if (!profile.start) profile.start = 1200; // players from before v0.4 started at 1200
+        store.set('spellbound.profile', profile);
         $('nameOverlay').hidden = true; renderRating();
         if (renamed && window.SBLadder.mode === 'live') toast('Your new name shows on the ladder after your next saved game.', 3200);
         resolve(true);
@@ -552,8 +588,53 @@
   }
   $('hintBtn').onclick = () => { const p = $('hintPanel'); p.hidden = !p.hidden; if (!p.hidden) renderHint(); else R.showArrow(-1); };
 
+  /* ---------- clock mode ---------- */
+  const fmtClock = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  function initClock() {
+    if (settings.clock === 'off' || watching) { clock = null; $('clocks').hidden = true; return; }
+    const [mins, inc] = settings.clock.split('+').map(Number);
+    clock = { w: mins * 60000, b: mins * 60000, inc: inc * 1000, run: null, last: 0 };
+    $('clocks').hidden = false; renderClock();
+  }
+  function clockStart(side) { if (!clock || watching) return; clock.run = side; clock.last = performance.now(); renderClock(); }
+  function clockStop(mover, addInc) {
+    if (!clock || !clock.run) return;
+    clock[clock.run] -= performance.now() - clock.last;
+    if (addInc && mover) clock[mover] += clock.inc;
+    clock.run = null; renderClock();
+  }
+  function renderClock() {
+    if (!clock) return;
+    const now = performance.now();
+    const left = (side) => clock[side] - (clock.run === side ? now - clock.last : 0);
+    const me = playerColor || 'w', them = me === 'w' ? 'b' : 'w';
+    for (const [id, side, label] of [['clockMe', me, 'You'], ['clockThem', them, 'Stones']]) {
+      const el = $(id), ms = left(side);
+      el.textContent = `${label} ${fmtClock(ms)}`;
+      el.classList.toggle('running', clock.run === side); el.classList.toggle('low', ms < 20000);
+    }
+    return left;
+  }
+  setInterval(() => {
+    if (!clock || !clock.run || phase === 'over') return;
+    const left = renderClock();
+    const side = clock.run;
+    if (left(side) <= 0) {
+      clock[side] = 0; clock.run = null; renderClock();
+      gameToken++;
+      endGame(side === 'w' ? '0-1' : '1-0', 'timeout');
+    }
+  }, 100);
+
+  function applySpeed() { if (R.setSpeed) R.setSpeed(settings.speed === 'fast' ? 0.55 : 1); }
+  $('clockSel').value = settings.clock; $('speedSel').value = settings.speed;
+  $('clockSel').onchange = () => { settings.clock = $('clockSel').value; saveSettings(); toast(settings.clock === 'off' ? 'Clock off from your next game.' : `Clock ${settings.clock} from your next game.`); };
+  $('speedSel').onchange = () => { settings.speed = $('speedSel').value; saveSettings(); applySpeed(); };
+  applySpeed();
+
   /* Test hook: start from a given position (used for automated checks; doesn't affect normal play). */
   window.__spellbound = {
+    setClock(ms) { if (clock) { clock.w = ms; clock.b = ms; } },
     loadFen(fen, color) {
       gameToken++; $('resultOverlay').hidden = true;
       game = new Game(fen); playerColor = color || game.turn; lastMove = null; gameOver = null; savedThisGame = false;

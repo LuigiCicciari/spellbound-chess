@@ -393,7 +393,7 @@
     defs.insertAdjacentHTML('beforeend', '<marker id="arrowhead" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8EC5E8"/></marker>');
 
     drawSquares();
-    return { el: svg, is3D: false, relax() {}, setView() {}, setPosition, setOrientation, mark, clearMarks, squareFromEvent, startDrag, moveDrag, endDrag, dragging, lift,
+    return { el: svg, is3D: false, relax() {}, setView() {}, setSpeed() {}, groundSquareFromEvent: (ev) => squareFromEvent(ev), setPosition, setOrientation, mark, clearMarks, squareFromEvent, startDrag, moveDrag, endDrag, dragging, lift,
       animateMove, topple, bow, pulseCheck, setThinking, showArrow, get orientation() { return orient; } };
   }
 

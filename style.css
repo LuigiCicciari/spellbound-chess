@@ -190,3 +190,14 @@ body.is3d .tray:empty { display: none; }
 body.is3d #trayTop { top: 10px; }
 body.is3d #trayBottom { bottom: 50px; }
 body.is3d .stage { padding: 8px 16px; gap: 12px; }
+
+/* clocks */
+.clocks { display: flex; gap: 8px; margin-left: auto; margin-right: 12px; }
+.clock { font: 600 15px var(--sans); font-variant-numeric: tabular-nums; padding: 3px 10px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); color: var(--text-2); }
+.clock.running { color: var(--text); border-color: var(--rune-w); }
+.clock.low { color: var(--alert); border-color: var(--alert); }
+/* starting rating choice */
+.start-choice { border: 1px solid var(--line); border-radius: 8px; margin: 12px 0 0; padding: 8px 12px; }
+.start-choice legend { padding: 0 4px; color: var(--text); }
+.start-choice label { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+.start-choice label b { margin-left: auto; color: var(--text-2); font-weight: 600; }

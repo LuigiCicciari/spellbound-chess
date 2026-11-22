@@ -6,5 +6,5 @@
 window.SB_CONFIG = {
   supabaseUrl: 'https://tudopqkstyfvczkqznfr.supabase.co',      // e.g. 'https://abcdefghijklmnop.supabase.co'
   supabaseAnonKey: 'sb_publishable_zT-gV7iMkd6PRbAbU0WGGA_MJBMTk5K',  // your Publishable key, e.g. 'sb_publishable_...'
-  appVersion: '0.3.3',
+  appVersion: '0.4.0',
 };

@@ -24,11 +24,16 @@
       -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 20, 30, 30, 20, -10, -30, -30, -30, 0, 0, 0, 0, -30, -30, -50, -30, -30, -30, -30, -30, -30, -50],
   };
 
+  // Levels 1-3 use this engine (ratings are estimates to calibrate against Stockfish).
+  // Levels 4-7 use Stockfish with UCI_Elo (sf.js); the built-in settings below are only a fallback if Stockfish can't load.
   const LEVELS = {
-    1: { name: 'Apprentice', elo: 600, depth: 1, blunder: 0.30, pool: 6, quiesce: false, timeMs: 400 },
-    2: { name: 'Adept', elo: 1000, depth: 2, blunder: 0.10, pool: 3, quiesce: false, timeMs: 700 },
-    3: { name: 'Master', elo: 1400, depth: 3, blunder: 0, pool: 1, quiesce: true, timeMs: 1200 },
-    4: { name: 'Archmage', elo: 1800, depth: 4, blunder: 0, pool: 1, quiesce: true, timeMs: 1500 },
+    1: { name: 'Apprentice', elo: 400, depth: 1, blunder: 0.30, pool: 6, quiesce: false, timeMs: 400 },
+    2: { name: 'Adept', elo: 800, depth: 2, blunder: 0.10, pool: 3, quiesce: false, timeMs: 700 },
+    3: { name: 'Master', elo: 1200, depth: 3, blunder: 0, pool: 1, quiesce: true, timeMs: 1200 },
+    4: { name: 'Archmage', elo: 1600, stockfish: true, depth: 4, blunder: 0, pool: 1, quiesce: true, timeMs: 1500 },
+    5: { name: 'Grand Archmage', elo: 2000, stockfish: true, depth: 4, blunder: 0, pool: 1, quiesce: true, timeMs: 1500 },
+    6: { name: 'Elder', elo: 2400, stockfish: true, depth: 4, blunder: 0, pool: 1, quiesce: true, timeMs: 1500 },
+    7: { name: 'Eternal', elo: 2800, stockfish: true, depth: 4, blunder: 0, pool: 1, quiesce: true, timeMs: 1500 },
   };
   const MATE = 100000;
 

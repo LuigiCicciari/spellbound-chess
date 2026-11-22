@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=0.3.3">
+  <link rel="stylesheet" href="style.css?v=0.4.0">
 </head>
 <body>
   <div class="app" id="app">
@@ -37,6 +37,7 @@
         <div class="tray" id="trayBottom" aria-label="Pieces taken"></div>
         <div class="statusline">
           <span id="status" aria-live="polite">Your move</span>
+          <span class="clocks" id="clocks" hidden><span class="clock" id="clockThem">Stones 5:00</span><span class="clock" id="clockMe">You 5:00</span></span>
           <form id="typeForm" class="type-form" autocomplete="off">
             <label for="typeMove">Type a move</label>
             <input id="typeMove" placeholder="Nf3 or e2e4" maxlength="8" spellcheck="false">
@@ -64,10 +65,13 @@
           <div class="row">
             <label>Level
               <select id="level">
-                <option value="1">1 · Apprentice (600)</option>
-                <option value="2">2 · Adept (1000)</option>
-                <option value="3">3 · Master (1400)</option>
-                <option value="4">4 · Archmage (1800)</option>
+                <option value="1">1 · Apprentice (400)</option>
+                <option value="2">2 · Adept (800)</option>
+                <option value="3">3 · Master (1200)</option>
+                <option value="4">4 · Archmage (1600)</option>
+                <option value="5">5 · Grand Archmage (2000)</option>
+                <option value="6">6 · Elder (2400)</option>
+                <option value="7">7 · Eternal (2800)</option>
               </select>
             </label>
             <label>You play
@@ -75,6 +79,22 @@
                 <option value="w">White</option>
                 <option value="b">Black</option>
                 <option value="r">Random</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label>Clock
+              <select id="clockSel">
+                <option value="off">Off</option>
+                <option value="10+0">10 min</option>
+                <option value="5+0">5 min</option>
+                <option value="3+2">3 min + 2 s</option>
+              </select>
+            </label>
+            <label>Animations
+              <select id="speedSel">
+                <option value="normal">Normal</option>
+                <option value="fast">Fast</option>
               </select>
             </label>
           </div>
@@ -133,6 +153,13 @@
       <div class="result-title">Your ladder name</div>
       <p class="small">3–16 letters, numbers or _. This is what other players see.</p>
       <input id="nameInput" maxlength="16" autocomplete="off" spellcheck="false">
+      <fieldset class="start-choice" id="startChoice">
+        <legend>How well do you play? <span class="small">(sets your starting rating)</span></legend>
+        <label><input type="radio" name="start" value="400"> I'm new to chess <b>400</b></label>
+        <label><input type="radio" name="start" value="800" checked> I play casually <b>800</b></label>
+        <label><input type="radio" name="start" value="1200"> I play a lot <b>1200</b></label>
+        <p class="small">Don't worry about picking wrong: your rating moves fast for your first 10 games.</p>
+      </fieldset>
       <div class="small error" id="nameError"></div>
       <div class="dialog-buttons">
         <button type="submit" class="btn primary">Save name</button>
@@ -158,8 +185,9 @@
       <ul>
         <li>Click one of your pieces, then click a glowing square. You can also drag, or type moves like <b>Nf3</b>.</li>
         <li>Just want to see the battles? Press <b>▶ Watch</b>.</li>
-        <li>Pick a computer level. Beating stronger stones earns more rating.</li>
-        <li>When a game ends, <b>Save to ladder</b> to update your rating. Everyone starts at 1200.</li>
+        <li>Pick a computer level. Each level is 400 rating points stronger than the last; levels 4–7 are powered by Stockfish. Beating stronger stones earns more rating.</li>
+        <li>When a game ends, <b>Save to ladder</b>. The first time, pick how well you play: you start even with the matching level (400, 800 or 1200). Ratings here come from games against the computer, so they're close to, but not the same as, chess.com or lichess ratings.</li>
+        <li>Turn on the <b>Clock</b> for timed games; running out of time loses.</li>
         <li><b>✦ Hint</b> (when available) shows what real players played from this position.</li>
       </ul>
       <div class="dialog-buttons"><button class="btn primary" id="helpClose">Let's play</button></div>
@@ -168,19 +196,20 @@
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="config.js?v=0.3.3"></script>
-  <script src="rules.js?v=0.3.3"></script>
-  <script src="engine.js?v=0.3.3"></script>
-  <script src="audio.js?v=0.3.3"></script>
-  <script src="render.js?v=0.3.3"></script>
-  <script src="ladder.js?v=0.3.3"></script>
+  <script src="config.js?v=0.4.0"></script>
+  <script src="rules.js?v=0.4.0"></script>
+  <script src="engine.js?v=0.4.0"></script>
+  <script src="audio.js?v=0.4.0"></script>
+  <script src="render.js?v=0.4.0"></script>
+  <script src="ladder.js?v=0.4.0"></script>
+  <script src="sf.js?v=0.4.0"></script>
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
   <script type="module">
     // Load the 3D board if the browser can; otherwise the flat board is used.
     try {
-      await Promise.race([import('./render3d.js?v=0.3.3'), new Promise((_, no) => setTimeout(() => no(new Error('3D load timed out')), 8000))]);
+      await Promise.race([import('./render3d.js?v=0.4.0'), new Promise((_, no) => setTimeout(() => no(new Error('3D load timed out')), 8000))]);
     } catch (e) { console.warn('Spellbound Chess: 3D board unavailable, using the flat board.', e); }
-    const s = document.createElement('script'); s.src = 'main.js?v=0.3.3'; document.body.appendChild(s);
+    const s = document.createElement('script'); s.src = 'main.js?v=0.4.0'; document.body.appendChild(s);
   </script>
 </body>
 </html>

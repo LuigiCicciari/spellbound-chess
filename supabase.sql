@@ -7,14 +7,16 @@ create table if not exists public.games (
   id            uuid primary key default gen_random_uuid(),
   player_id     uuid not null,
   handle        text not null check (handle ~ '^[A-Za-z0-9_]{3,16}$'),
-  level         smallint not null check (level between 1 and 4),
+  level         smallint not null check (level between 1 and 7),
   engine_elo    smallint not null check (engine_elo between 100 and 3000),
   player_color  text not null check (player_color in ('w', 'b')),
   result        text not null check (result in ('W', 'D', 'L')),
-  termination   text not null check (termination in ('checkmate', 'resign', 'stalemate', 'threefold', 'fifty_move', 'insufficient', 'draw_agreed')),
+  termination   text not null check (termination in ('checkmate', 'resign', 'stalemate', 'threefold', 'fifty_move', 'insufficient', 'draw_agreed', 'timeout')),
   ply_count     smallint not null check (ply_count between 1 and 600),
   pgn           text not null check (char_length(pgn) < 10000),
   app_version   text check (char_length(app_version) <= 20),
+  start_rating  smallint check (start_rating in (400, 800, 1200)),
+  clock         text check (char_length(clock) <= 10),
   created_at    timestamptz not null default now()
 );
 

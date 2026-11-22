@@ -5,14 +5,17 @@
   const R = root.SBRules || (typeof require !== 'undefined' ? require('./rules.js') : null);
 
   const START = 1200, FLOOR = 100, PROVISIONAL = 5;
-  const kFor = (gamesPlayed) => (gamesPlayed < 20 ? 40 : 20);
+  const STARTS = [400, 800, 1200]; // New to chess / Play casually / Play a lot
+  // Ratings move fastest at first so a wrong starting guess corrects itself within a few games.
+  const kFor = (gamesPlayed) => (gamesPlayed < 10 ? 60 : gamesPlayed < 20 ? 40 : 20);
   const expected = (r, opp) => 1 / (1 + Math.pow(10, (opp - r) / 400));
   const scoreOf = (res) => (res === 'W' ? 1 : res === 'D' ? 0.5 : 0);
 
   /* Check that a saved game is real: legal moves, and the result matches the final position where it can be checked. */
   function verify(g) {
     if (!g || !/^[A-Za-z0-9_]{3,16}$/.test(g.handle || '')) return false;
-    if (![1, 2, 3, 4].includes(Number(g.level))) return false;
+    if (!(Number(g.level) >= 1 && Number(g.level) <= 7)) return false;
+    if (g.start_rating != null && !STARTS.includes(Number(g.start_rating)) && Number(g.start_rating) !== START) return false;
     if (!['W', 'D', 'L'].includes(g.result) || !['w', 'b'].includes(g.player_color)) return false;
     const game = R.replay(g.pgn);
     if (!game) return false;
@@ -23,6 +26,7 @@
     if (['stalemate', 'threefold', 'fifty_move', 'insufficient'].includes(t)) return !!st && st.reason === t && g.result === 'D';
     if (t === 'resign') return !st && g.result === 'L'; // only the player can resign
     if (t === 'draw_agreed') return !st && g.result === 'D';
+    if (t === 'timeout') return !st && g.result !== 'D'; // a flag can't be checked from the moves, like a resignation
     return false;
   }
 
@@ -33,7 +37,7 @@
     const sorted = games.filter(verify).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
     for (const g of sorted) {
       let p = players.get(g.player_id);
-      if (!p) { p = { player_id: g.player_id, handle: g.handle, rating: START, games: 0, w: 0, d: 0, l: 0, best: 0, today: 0, history: [], reachedAt: g.created_at }; players.set(g.player_id, p); }
+      if (!p) { const s0 = Number(g.start_rating) || START; p = { player_id: g.player_id, handle: g.handle, start: s0, rating: s0, games: 0, w: 0, d: 0, l: 0, best: 0, today: 0, history: [], reachedAt: g.created_at }; players.set(g.player_id, p); }
       const before = p.rating;
       const e = expected(before, Number(g.engine_elo));
       const after = Math.max(FLOOR, before + kFor(p.games) * (scoreOf(g.result) - e));
@@ -115,7 +119,7 @@
     return { mode };
   }
 
-  const api = { verify, compute, preview, loadAll, save, START, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
+  const api = { verify, compute, preview, loadAll, save, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SBLadder = api;
 })(typeof window !== 'undefined' ? window : this);

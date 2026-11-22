@@ -216,6 +216,8 @@ export function create(container) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   container.innerHTML = ''; container.appendChild(renderer.domElement);
   const el = renderer.domElement; el.style.touchAction = 'none'; el.setAttribute('aria-label', 'Chess board');
+  // if the browser resets 3D graphics, let it restore instead of leaving a black board
+  el.addEventListener('webglcontextlost', (e) => e.preventDefault(), false);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x15161b);
@@ -416,7 +418,9 @@ export function create(container) {
 
   /* ---------- tweens and particles ---------- */
   const tasks = new Set();
+  let speed = 1; // 1 = Normal, 0.55 = Fast
   function tween(ms, fn, easing) {
+    ms *= speed;
     if (reducedMotion()) ms = Math.min(ms, 120);
     return new Promise((res) => tasks.add({ t0: performance.now(), ms: Math.max(1, ms), fn, e: easing || ease.inOut, res }));
   }
@@ -609,6 +613,10 @@ export function create(container) {
       let o = hits[0].object; while (o && o.parent !== piecesG) o = o.parent;
       for (const [sq, obj] of pieceAt) if (obj === o) return sq;
     }
+    return groundSquareFromEvent(ev);
+  }
+  /* The board square under the pointer, ignoring pieces (so tall pieces never block a target square). */
+  function groundSquareFromEvent(ev) {
     const p = planePoint(ev, 0); if (!p) return -1;
     const c = Math.floor(p.x + 4), rr = Math.floor(p.z + 4);
     return c < 0 || c > 7 || rr < 0 || rr > 7 ? -1 : rr * 8 + c;
@@ -807,7 +815,7 @@ export function create(container) {
       await attack(obj, victim);                                   // 3 contact
       shatter(victim, victim.userData.hitDir || toward.clone().normalize()); // 4 defeat
       piecesG.remove(victim); pieceAt.delete(capSq);                // 5 removal
-      await sleep(260);
+      await sleep(260 * speed);
       await travel(obj, m.from, dest, type === 'N' ? 'P' : type);
       if (opts.celebrate !== false) celebrate(obj);
     } else {
@@ -906,7 +914,7 @@ export function create(container) {
   return {
     el, is3D: true, setPosition, setOrientation, setView, mark, clearMarks, squareFromEvent, startDrag, moveDrag, endDrag, dragging,
     lift, relax, animateMove, topple, surrender, bow, pulseCheck, checkGuard, setThinking, showArrow,
-    flare, intro, setTurn, setAlert, thunder, get orientation() { return orient; }, get view() { return view; },
+    flare, intro, setTurn, setAlert, thunder, groundSquareFromEvent, setSpeed(f) { speed = f; }, get orientation() { return orient; }, get view() { return view; },
   };
 }
 

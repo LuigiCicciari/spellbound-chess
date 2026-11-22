@@ -11,10 +11,11 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 - A 3D stone battlefield: original carved warriors that march, fight and shatter (flat 2D board as an automatic fallback; add `?flat` to the address to force it)
 - Personality: pieces stand to attention, hesitate when sent into danger, celebrate captures, and the king kneels in surrender
 - ▶ Watch mode: the computer plays itself so you can enjoy the battles without playing
-- Four computer levels: Apprentice (600), Adept (1000), Master (1400), Archmage (1800)
+- Seven computer levels, each 400 rating points apart: Apprentice (400), Adept (800), Master (1200) use the game's own engine; Archmage (1600), Grand Archmage (2000), Elder (2400), Eternal (2800) use Stockfish
+- Optional clock (10 min, 5 min, 3 min + 2 s) and Normal / Fast animations
 - Click, drag, or type moves (`Nf3`, `e2e4`)
 - Animated moves, captures, promotions, castling and checkmate, with synthesized stone sound effects
-- Elo rating (everyone starts at 1200), with ALL TIME, TODAY and MINE ladder tabs
+- Elo rating: on your first save you pick New (400), Casual (800) or A lot (1200); ratings move fastest for your first 10 games. ALL TIME, TODAY and MINE ladder tabs
 - You pick the name that shows on the ladder, and can change it with the ✎ button
 - Respects your system's reduced-motion setting
 
@@ -36,7 +37,10 @@ Ratings are never trusted from the browser. The ladder replays every saved game'
 |---|---|
 | `index.html`, `style.css` | Page layout and dark stone theme |
 | `rules.js` | Chess rules: legal moves, check, castling, en passant, promotion, draws |
-| `engine.js`, `engine.worker.js` | Computer opponent (alpha-beta search), run off the main thread |
+| `engine.js`, `engine.worker.js` | The game's own computer opponent (levels 1–3), run off the main thread |
+| `sf.js` | Runs Stockfish for levels 4–7 |
+| `engine/` | Stockfish.js 17.1 lite single-threaded (`stockfish-17.1-lite-single-03e3232.js` + `.wasm`), GPLv3, from [nmrugg/stockfish.js](https://github.com/nmrugg/stockfish.js) |
+| `supabase-update-v0.4.sql` | One-time database update for v0.4 |
 | `render3d.js` | 3D board, original stone warriors and battle animation ([three.js](https://threejs.org), MIT, loaded from jsDelivr) |
 | `render.js` | Flat SVG board, used when 3D isn't available |
 | `audio.js` | Sound effects made with WebAudio (no audio files) |
@@ -49,6 +53,10 @@ Ratings are never trusted from the browser. The ladder replays every saved game'
 
 In Tableau Desktop Public Edition, make a dashboard at a fixed size of 1500 × 926, add a **Web Page** object that fills it, and point it at the Play link above. Then publish to Tableau Public.
 
+## License
+
+This game is released under the GNU General Public License v3 because it includes Stockfish (GPLv3).
+
 ## Credits
 
-Piece designs, code and sounds are original. Title font: [Cinzel](https://fonts.google.com/specimen/Cinzel) (SIL Open Font License), from Google Fonts.
+Piece designs, code and sounds are original. Stockfish © the Stockfish developers; Stockfish.js © Chess.com, LLC (GPLv3). Title font: [Cinzel](https://fonts.google.com/specimen/Cinzel) (SIL Open Font License), from Google Fonts.
