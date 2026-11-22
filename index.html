@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spellbound Chess</title>
+  <meta name="description" content="Play chess against living stone pieces. Earn an Elo rating and climb the ladder.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="top">
+      <h1>Spellbound <span>Chess</span></h1>
+      <div class="top-actions">
+        <button class="icon-btn" id="soundBtn" aria-pressed="true" title="Sound on/off">♪ <span id="soundLabel">Sound on</span></button>
+        <button class="icon-btn" id="helpBtn" title="How to play">? How to play</button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="board-col" aria-label="Board">
+        <div class="tray" id="trayTop" aria-label="Pieces taken"></div>
+        <div class="board-wrap">
+          <svg id="board" class="board" role="img" aria-label="Chess board"></svg>
+          <button class="hint-btn" id="hintBtn" title="What do real players play here?" hidden>✦ Hint</button>
+          <div class="hint-panel" id="hintPanel" hidden></div>
+          <div class="promo" id="promo" hidden>
+            <div class="promo-title">Raise your pawn as…</div>
+            <div class="promo-choices" id="promoChoices"></div>
+          </div>
+        </div>
+        <div class="tray" id="trayBottom" aria-label="Pieces taken"></div>
+        <div class="statusline">
+          <span id="status" aria-live="polite">Your move</span>
+          <form id="typeForm" class="type-form" autocomplete="off">
+            <label for="typeMove">Type a move</label>
+            <input id="typeMove" placeholder="Nf3 or e2e4" maxlength="8" spellcheck="false">
+          </form>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="card rating-card" aria-label="Your rating">
+          <div class="who">
+            <span id="handle" class="handle">Unnamed player</span>
+            <button class="pencil" id="renameBtn" title="Change your name" aria-label="Change your name">✎</button>
+            <span class="label">RATING</span>
+          </div>
+          <div class="rating-row">
+            <span class="rating" id="rating">1,200</span>
+            <span class="delta neutral" id="delta">■ ±0</span>
+            <span class="record" id="record">W 0 · D 0 · L 0</span>
+          </div>
+          <div class="sub" id="ratingSub">Play and save a game to get your rating (everyone starts at 1200)</div>
+          <svg class="spark" id="spark" viewBox="0 0 440 50" preserveAspectRatio="none" aria-hidden="true"></svg>
+        </section>
+
+        <section class="card controls" aria-label="Game controls">
+          <div class="row">
+            <label>Level
+              <select id="level">
+                <option value="1">1 · Apprentice (600)</option>
+                <option value="2">2 · Adept (1000)</option>
+                <option value="3">3 · Master (1400)</option>
+                <option value="4">4 · Archmage (1800)</option>
+              </select>
+            </label>
+            <label>You play
+              <select id="color">
+                <option value="w">White</option>
+                <option value="b">Black</option>
+                <option value="r">Random</option>
+              </select>
+            </label>
+          </div>
+          <div class="row buttons">
+            <button id="newBtn" class="btn primary">New game</button>
+            <button id="drawBtn" class="btn">Draw?</button>
+            <button id="resignBtn" class="btn">Resign</button>
+            <button id="flipBtn" class="btn" title="Flip board" aria-label="Flip board">⇅</button>
+          </div>
+        </section>
+
+        <section class="card moves" aria-label="Moves">
+          <div class="card-head"><span>MOVES</span><button class="link" id="movesToggle">show all</button></div>
+          <ol class="movelist" id="moveList"></ol>
+        </section>
+
+        <section class="card ladder" aria-label="Ladder">
+          <div class="card-head">
+            <span>LADDER</span>
+            <div class="tabs" role="tablist">
+              <button role="tab" class="tab active" data-tab="all">ALL TIME</button>
+              <button role="tab" class="tab" data-tab="today">TODAY</button>
+              <button role="tab" class="tab" data-tab="mine">MINE</button>
+            </div>
+          </div>
+          <div class="ladder-body" id="ladderBody"></div>
+          <div class="ladder-foot"><span class="chip" id="chip">○ LOCAL</span><span id="ladderNote"></span></div>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="foot">Original pieces and code · <a href="https://github.com/LuigiCicciari/spellbound-chess" target="_blank" rel="noopener">github.com/LuigiCicciari/spellbound-chess</a></footer>
+  </div>
+
+  <!-- overlays -->
+  <div class="overlay" id="resultOverlay" hidden>
+    <div class="dialog result">
+      <div class="result-title" id="resultTitle">Checkmate</div>
+      <div class="result-sub" id="resultSub"></div>
+      <div class="result-delta" id="resultDelta"></div>
+      <div class="dialog-buttons">
+        <button class="btn primary" id="saveBtn">Save to ladder</button>
+        <button class="btn" id="againBtn">Play again</button>
+        <button class="btn" id="replayBtn">Replay moves</button>
+      </div>
+      <div class="small" id="saveNote"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="nameOverlay" hidden>
+    <form class="dialog" id="nameForm">
+      <div class="result-title">Your ladder name</div>
+      <p class="small">3–16 letters, numbers or _. This is what other players see.</p>
+      <input id="nameInput" maxlength="16" autocomplete="off" spellcheck="false">
+      <div class="small error" id="nameError"></div>
+      <div class="dialog-buttons">
+        <button type="submit" class="btn primary">Save name</button>
+        <button type="button" class="btn" id="nameCancel">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="overlay" id="confirmOverlay" hidden>
+    <div class="dialog">
+      <div class="result-title" id="confirmTitle">Are you sure?</div>
+      <p class="small" id="confirmText"></p>
+      <div class="dialog-buttons">
+        <button class="btn primary" id="confirmYes">Yes</button>
+        <button class="btn" id="confirmNo">No</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="helpOverlay" hidden>
+    <div class="dialog help">
+      <div class="result-title">How to play</div>
+      <ul>
+        <li>Click one of your pieces, then click a glowing square. You can also drag, or type moves like <b>Nf3</b>.</li>
+        <li>Pick a computer level. Beating stronger stones earns more rating.</li>
+        <li>When a game ends, <b>Save to ladder</b> to update your rating. Everyone starts at 1200.</li>
+        <li><b>✦ Hint</b> (when available) shows what real players played from this position.</li>
+      </ul>
+      <div class="dialog-buttons"><button class="btn primary" id="helpClose">Let's play</button></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="config.js"></script>
+  <script src="rules.js"></script>
+  <script src="engine.js"></script>
+  <script src="audio.js"></script>
+  <script src="render.js"></script>
+  <script src="ladder.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
