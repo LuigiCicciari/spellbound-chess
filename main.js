@@ -53,7 +53,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.8.2');
+    worker = new Worker('engine.worker.js?v=0.9.0');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -187,7 +187,7 @@
 
   /* ---------- game flow ---------- */
   async function newGame() {
-    if (store.get(PENDING, null)) flushPending();
+    if (store.get(PENDING, null) && !saveInFlight) flushPending();
     if (reviewState) endReview(false);
     reportToken++; $('reportOverlay').hidden = true;
     gameToken++;
@@ -270,8 +270,15 @@
   async function endGame(result, reason) {
     if (phase === 'over') return;                       // a game ends once (e.g. flag while a dialog was open)
     const wasRated = rated();                           // decided now: the mode switch can't change a finished game
+    const endToken = gameToken;                         // if a new game starts during the ending, the pending record saves this one
     phase = 'over'; selected = null; updateButtons(); clockStop(null, false);
-    clearPending(); updateMode();
+    {
+      const pw = (result === '1-0' && playerColor === 'w') || (result === '0-1' && playerColor === 'b');
+      const res = result === '1/2-1/2' ? 'D' : pw ? 'W' : 'L';
+      if (wasRated && !unrated && !watching && profile.handle && profile.start && game.sanHistory.length >= 2) store.set(PENDING, recordFor(res, reason));
+      else clearPending();
+    }
+    updateMode();
     if (promoResolve) promoResolve(null);
     if (confirmResolve) confirmResolve(false);
     R.setThinking('w', false); R.setThinking('b', false);
@@ -287,6 +294,7 @@
       setStatus('Draw');
       await R.bow([game.kingSquare('w'), game.kingSquare('b')]);
     } else setStatus(reason === 'timeout' ? (playerWon ? 'The stones ran out of time' : 'You ran out of time') : (playerWon ? 'You win' : 'You resigned'));
+    if (endToken !== gameToken) return;
     if (watching) {
       const token = gameToken;
       setStatus(`${draw ? 'Draw' : (result === '1-0' ? 'Moonstone' : 'Obsidian') + ' wins'} ${REASONS[reason] || ''} · next battle soon…`);
@@ -335,13 +343,14 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.8.2',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.9.0',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
   /* A rated game in progress is kept as "resigned" in this browser, so closing the page or starting over
      mid-game still counts as a loss. It's cleared the moment the game ends normally. */
   const PENDING = 'spellbound.pending';
+  let saveInFlight = false;   // a save is on its way: don't send the same game again from the pending record
   function notePending() {
     if (unrated || !rated()) { clearPending(); return; }
     if (watching || !profile.handle || !profile.start || phase === 'over' || phase === 'replay' || game.sanHistory.length < 2) return;
@@ -354,7 +363,7 @@
     clearPending();
     if (!window.SBLadder.verify(rec)) return;
     const r = await window.SBLadder.save(rec, profile.secret);
-    if (!r.error) { toast('Your unfinished game was counted as a resignation.', 4000); refreshLadder(); }
+    if (!r.error) { toast(rec.termination === 'resign' ? 'Your unfinished game was counted as a resignation.' : 'Your last game has been saved to the leaderboard.', 4000); refreshLadder(); }
   }
 
   async function saveGame() {
@@ -362,12 +371,14 @@
     if (!profile.handle || !profile.start) { const ok = await askName(); if (!ok) return; }
     const rec = recordFor(gameOver.res, gameOver.reason);
     if (rec.ply_count < 2) return;
-    if (!window.SBLadder.verify(rec)) { $('saveNote').textContent = 'This game could not be verified, so it was not saved.'; return; }
+    if (!window.SBLadder.verify(rec)) { clearPending(); $('saveNote').textContent = 'This game could not be verified, so it was not saved.'; return; }
     savedThisGame = true;
     $('saveBtn').disabled = true; $('saveBtn').textContent = 'Saving…';
     const before = myStats().rating;
-    const r = await window.SBLadder.save(rec, profile.secret);
-    if (r.error) { savedThisGame = false; $('saveBtn').disabled = false; $('saveBtn').textContent = 'Try again'; $('saveNote').textContent = `Not saved: ${r.error}.`; return; }
+    saveInFlight = true;
+    const r = await window.SBLadder.save(rec, profile.secret).finally(() => { saveInFlight = false; });
+    if (r.error) { if (!/busy|network|fetch|timed? ?out|5\d\d/i.test(r.error)) clearPending(); savedThisGame = false; $('saveBtn').disabled = false; $('saveBtn').textContent = 'Try again'; $('saveNote').textContent = `Not saved: ${r.error}.`; return; }
+    clearPending();                                  // saved: nothing left to send later
     await refreshLadder();
     const after = myStats().rating;
     countUp($('rating'), before, after);

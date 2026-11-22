@@ -21,6 +21,7 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 - Elo rating: the first time you finish a Rated game you pick a name and New (400), Sometimes (800) or A lot (1200); after that Rated games save automatically. Ratings move fastest for your first 10 games. ALL TIME, TODAY and MINE leaderboard tabs
 - At levels 4–7 Stockfish decides whether to accept a draw offer (offers open after move 20)
 - You pick the name that shows on the leaderboard and can change it with the ✎ button, which also shows a recovery code for using your rating on another device
+- Works on phones: the board fills the screen width, the controls sit right under it, and the battle report opens full screen. In Tableau, add a Phone device layout holding the same Web Page object.
 - Respects your system's reduced-motion setting
 
 ## Online leaderboard (optional)

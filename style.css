@@ -258,3 +258,46 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
 .chart-lab { fill: var(--text); font: 600 11px var(--sans); text-anchor: middle; }
 .chart-lab.left { text-anchor: start; fill: var(--text-2); font-weight: 400; }
 .mode-switch.locked .mode-btn[aria-checked="false"] span { color: var(--rune-b); opacity: 1; }
+
+/* ---------- phones (portrait first) ---------- */
+@media (max-width: 700px) {
+  .app { min-height: 0; grid-template-rows: auto auto auto; }
+  .top { padding: 8px 10px; min-height: 44px; }
+  .top h1 { font-size: 16px; letter-spacing: .06em; }
+  .top .btn-label { display: none; }
+  .icon-btn { min-width: 40px; min-height: 36px; font-size: 16px; }
+  .stage { padding: 6px !important; gap: 8px !important; }
+  /* the board comes first and fills the width; a square-ish box keeps the camera close so pieces are big enough to tap */
+  body.is3d .board-wrap { height: min(96vw, 62vh); flex: none; }
+  .board-wrap { width: 100%; }
+  .statusline { font-size: 14px; padding: 4px 2px 0; }
+  .type-form { display: none; }               /* typing moves isn't worth a phone keyboard popping up */
+  /* controls straight under the board, then the rating, moves and leaderboard */
+  .side { gap: 8px; }
+  .side .controls { order: -1; }
+  .card { padding: 10px; }
+  .controls .row { gap: 6px; }
+  .controls .row + .row { margin-top: 8px; }
+  .btn { min-height: 40px; }
+  .mode-btn { min-height: 40px; }
+  .clock-badge { font-size: 16px; padding: 4px 9px; right: 8px; }
+  .clock-badge.them { top: 8px; } .clock-badge.me { bottom: 8px; }
+  body.is3d #trayBottom { bottom: 8px; }
+  .review-bar { left: 6px; right: 6px; top: 6px; padding: 6px 8px; font-size: 13px; gap: 6px; }
+  .review-bar #reviewText { min-width: 100%; }
+  .review-btns { width: 100%; } .review-btns .btn { flex: 1; padding: 6px; }
+  /* the battle report becomes a full screen page */
+  .overlay:has(.dialog.report) { align-items: stretch; padding: 0; }
+  .dialog.report { width: 100vw; max-width: none; height: 100dvh; max-height: none; border-radius: 0; padding: 14px 12px 18px; }
+  .report-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .report-stats .stat { min-width: 0; }
+  .report-chart svg { height: 190px; }
+  .moment { flex-wrap: wrap; }
+  .moment .what { flex-basis: calc(100% - 90px); }
+  .moment .btn { margin-left: auto; min-height: 36px; }
+  .dialog.report .dialog-buttons { position: sticky; bottom: -18px; background: var(--panel); padding: 10px 0 4px; flex-wrap: wrap; }
+  .dialog { width: 94vw; }
+  .dialog-buttons { flex-wrap: wrap; }
+  .toast { bottom: 16px; max-width: 92vw; text-align: center; }
+}
+@media (pointer: coarse) { .btn, .mode-btn { min-height: 40px; } }
