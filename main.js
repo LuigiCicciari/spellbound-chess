@@ -84,6 +84,7 @@
     const st = Object.assign({ lastMove }, extra || {});
     st.check = game.inCheck() ? game.kingSquare(game.turn) : null;
     R.mark(st);
+    if (R.setTurn) R.setTurn(game.turn, game.inCheck());
   }
 
   function renderMoves() {
@@ -133,6 +134,11 @@
     playerColor = c === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : c;
     R.setOrientation(playerColor, game.board);
     syncBoard();
+    if (R.intro) {
+      const token = gameToken; phase = 'intro'; updateButtons(); setStatus('The armies rise…');
+      await R.intro();
+      if (token !== gameToken) return;
+    }
     if (game.turn === playerColor) { phase = 'player'; setStatus('Your move'); }
     else { phase = 'engine'; engineTurn(); }
     updateButtons();
@@ -169,7 +175,7 @@
     const mover = colorOf(played.piece) === playerColor ? 'You' : 'Stones';
     const st = game.status();
     if (st) { await endGame(st.result, st.reason); return true; }
-    if (game.inCheck()) { R.pulseCheck(); if (R.checkGuard) R.checkGuard(game.kingSquare(game.turn)); }
+    if (game.inCheck()) { R.pulseCheck(); if (R.checkGuard) R.checkGuard(game.kingSquare(game.turn)); if (R.thunder) R.thunder(); }
     if (watching) { setStatus(`Watching · ${colorOf(played.piece) === 'w' ? 'Moonstone' : 'Obsidian'} played ${played.san}`); engineTurn(); }
     else if (game.turn === playerColor) { phase = 'player'; setStatus(game.inCheck() ? 'Check! Your move' : `${mover === 'Stones' ? 'Stones played ' + played.san + ' · ' : ''}Your move`, game.inCheck()); }
     else { engineTurn(); }
@@ -186,6 +192,7 @@
     if (reason === 'checkmate') {
       const loser = result === '1-0' ? 'b' : 'w';
       setStatus('Checkmate');
+      if (R.setAlert) R.setAlert('mate', loser === 'w' ? 'b' : 'w');
       await (R.surrender || R.topple)(game.kingSquare(loser));
     } else if (draw) {
       setStatus('Draw');
@@ -336,7 +343,6 @@
   }
   boardEl.addEventListener('pointerleave', () => { $('pieceTip').hidden = true; });
   boardEl.addEventListener('pointermove', (ev) => {
-    if (ev.pointerType !== 'touch') showTip(ev);
     if (pointerDownSq === null) return;
     if (!dragStarted && downPos && Math.hypot(ev.clientX - downPos.x, ev.clientY - downPos.y) > 6) { dragStarted = true; R.startDrag(pointerDownSq, ev); }
     if (dragStarted) R.moveDrag(ev);
@@ -398,8 +404,13 @@
     $('watchBtn').textContent = '■ Stop';
     R.setOrientation(R.orientation || 'w', game.board);
     syncBoard();
-    setStatus('Watching the stones battle…');
-    engineTurn();
+    const token = gameToken;
+    (async () => {
+      if (R.intro) { phase = 'intro'; setStatus('The armies rise…'); await R.intro(); }
+      if (token !== gameToken || !watching) return;
+      setStatus('Watching the stones battle…');
+      engineTurn();
+    })();
   }
   $('watchBtn').onclick = () => { if (watching) newGame(); else startWatch(); };
   $('viewBtn').onclick = () => { if (!R.setView) return; R.setView(R.view === 'battle' ? 'overhead' : 'battle'); $('viewBtn').textContent = R.view === 'battle' ? '◎ Top view' : '◈ Battle view'; };

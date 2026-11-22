@@ -118,20 +118,38 @@ function buildPiece(type, side, MAT) {
       mesh(new THREE.BoxGeometry(0.06, 0.06, 0.03), M.rune, 0, 0.05, 0.035, weapon).castShadow = false;
       break;
     }
-    case 'N': { // warhorse: long head, ears, flowing stone mane
-      height = 0.95;
-      mesh(lathe([[0, 0.12], [0.22, 0.12], [0.19, 0.22], [0, 0.24]], 12), M.trim, 0, 0, 0, body);
-      const neck = mesh(new THREE.BoxGeometry(0.2, 0.5, 0.26), M.stone, 0, 0.44, -0.04, body); neck.rotation.x = -0.32;
-      const chest = mesh(new THREE.BoxGeometry(0.22, 0.22, 0.2), M.stone, 0, 0.3, 0.06, body); chest.rotation.x = 0.2;
-      head = pivot(body, 0, 0.7, 0.05);
-      const skull = mesh(new THREE.BoxGeometry(0.18, 0.17, 0.4), M.stone, 0, 0, 0.12, head); skull.rotation.x = 0.62;
-      const muzzle = mesh(new THREE.BoxGeometry(0.15, 0.12, 0.14), M.trim, 0, -0.17, 0.27, head); muzzle.rotation.x = 0.62;
-      mesh(new THREE.BoxGeometry(0.04, 0.03, 0.02), M.dark, -0.04, -0.2, 0.34, head); mesh(new THREE.BoxGeometry(0.04, 0.03, 0.02), M.dark, 0.04, -0.2, 0.34, head);
-      for (const sx of [-1, 1]) {
-        const ear = mesh(new THREE.ConeGeometry(0.035, 0.14, 5), M.stone, sx * 0.06, 0.15, -0.05, head); ear.rotation.x = -0.25; ear.rotation.z = -sx * 0.15;
-        mesh(new THREE.SphereGeometry(0.026, 8, 6), M.rune, sx * 0.095, 0.03, 0.06, head).castShadow = false;
+    case 'N': { // warhorse: a carved horse-head profile (classic knight silhouette) with a stone mane
+      height = 1.02;
+      mesh(lathe([[0, 0.12], [0.22, 0.12], [0.19, 0.2], [0, 0.22]], 12), M.trim, 0, 0, 0, body);
+      head = pivot(body, 0, 0, 0);
+      const prof = new THREE.Shape();
+      // x = forward, y = up
+      prof.moveTo(-0.19, 0.2);
+      prof.lineTo(0.17, 0.2);
+      prof.quadraticCurveTo(0.22, 0.34, 0.11, 0.48);   // chest into throat
+      prof.quadraticCurveTo(0.17, 0.57, 0.3, 0.6);     // jaw
+      prof.quadraticCurveTo(0.39, 0.62, 0.37, 0.71);   // muzzle
+      prof.quadraticCurveTo(0.3, 0.79, 0.16, 0.85);    // nose bridge
+      prof.lineTo(0.08, 0.95);                          // forehead
+      prof.lineTo(0.05, 1.05);                          // ear tip
+      prof.lineTo(-0.02, 0.93);
+      prof.quadraticCurveTo(-0.14, 0.9, -0.2, 0.74);    // poll and crest
+      prof.quadraticCurveTo(-0.27, 0.5, -0.19, 0.2);    // back of neck
+      const depth = 0.2;
+      const geo = new THREE.ExtrudeGeometry(prof, { depth, bevelEnabled: true, bevelThickness: 0.035, bevelSize: 0.03, bevelSegments: 1, curveSegments: 6 });
+      geo.translate(0, 0, -depth / 2); geo.rotateY(-Math.PI / 2);
+      mesh(geo, M.stone, 0, 0, 0, head);
+      // mane: a ridge of stone fins down the back of the neck
+      for (let i = 0; i < 7; i++) {
+        const t = i / 6, y = 0.9 - t * 0.6, z = -0.12 - Math.sin(t * Math.PI) * 0.1 - t * 0.02;
+        const fin = mesh(new THREE.BoxGeometry(0.06, 0.12, 0.09), M.trim, 0, y, z, head); fin.rotation.x = -0.5 - t * 0.4;
       }
-      for (let i = 0; i < 6; i++) { const fin = mesh(new THREE.BoxGeometry(0.05, 0.13, 0.08), M.trim, 0, 0.26 + i * 0.09, -0.2 + i * 0.035, body); fin.rotation.x = -0.45; }
+      // bridle band, eyes and nostrils on both sides
+      const band = mesh(new THREE.BoxGeometry(0.29, 0.035, 0.05), M.trim, 0, 0.72, 0.24, head); band.rotation.x = -0.6;
+      for (const sx of [-1, 1]) {
+        mesh(new THREE.SphereGeometry(0.03, 8, 6), M.rune, sx * 0.125, 0.8, 0.12, head).castShadow = false;
+        mesh(new THREE.SphereGeometry(0.018, 6, 4), M.dark, sx * 0.1, 0.66, 0.35, head);
+      }
       weapon = head;
       break;
     }
@@ -218,18 +236,19 @@ export function create(container) {
   let fireBoost = 0;
   const bowlStone = new THREE.MeshStandardMaterial({ color: 0x4a4640, roughness: 0.95, flatShading: true });
   const add = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
-  const flameLayers = [[0.46, 1.5, add(0xff5a14, 0.55)], [0.32, 1.1, add(0xff9a30, 0.7)], [0.17, 0.62, add(0xffe6a8, 0.95)]];
+  const flameLayers = [[0.62, 2.3, add(0xff3c0a, 0.45)], [0.5, 1.8, add(0xff6a1a, 0.55)], [0.34, 1.3, add(0xffa040, 0.7)], [0.18, 0.75, add(0xfff0c0, 0.95)]];
+  const FIRE_BASE = 0.8;
   const EMBER_TEX = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); const gr = g.createRadialGradient(16, 16, 0, 16, 16, 15); gr.addColorStop(0, 'rgba(255,230,170,1)'); gr.addColorStop(0.4, 'rgba(255,140,40,0.9)'); gr.addColorStop(1, 'rgba(255,80,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
-  for (const [x, z] of [[-5.3, -5.3], [5.3, -5.3], [-5.3, 5.3], [5.3, 5.3]]) {
-    mesh(new THREE.CylinderGeometry(0.3, 0.42, 0.34, 8), bowlStone, x, -0.2, z, scene);
-    const bowl = mesh(new THREE.CylinderGeometry(0.58, 0.32, 0.3, 8, 1, true), bowlStone, x, 0.12, z, scene); bowl.material.side = THREE.DoubleSide;
-    mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.04, 8), new THREE.MeshBasicMaterial({ color: 0x5a1e06 }), x, 0.2, z, scene);
+  for (const [x, z] of [[-5.7, -1.6], [5.7, -1.6], [-5.9, 2.4], [5.9, 2.4]]) {
+    mesh(new THREE.CylinderGeometry(0.34, 0.5, 0.9, 8), bowlStone, x, 0.08, z, scene);
+    const bowl = mesh(new THREE.CylinderGeometry(0.62, 0.34, 0.34, 8, 1, true), bowlStone, x, 0.68, z, scene); bowl.material.side = THREE.DoubleSide;
+    mesh(new THREE.CylinderGeometry(0.56, 0.56, 0.04, 8), new THREE.MeshBasicMaterial({ color: 0x5a1e06 }), x, 0.78, z, scene);
     for (const [r, h, mat] of flameLayers) {
       const f = new THREE.Mesh(new THREE.ConeGeometry(r, h, 9, 1, true), mat);
-      f.position.set(x, 0.2 + h / 2, z); f.userData.baseY = 0.2 + h / 2; f.userData.h = h; scene.add(f); flames.push(f);
+      f.position.set(x, FIRE_BASE + h / 2, z); f.userData.h = h; scene.add(f); flames.push(f);
     }
-    const t = new THREE.PointLight(0xff9a40, 14, 11, 1.5); t.position.set(x, 1.1, z); scene.add(t); torches.push(t);
-    bowls.push(new THREE.Vector3(x, 0.3, z));
+    const t = new THREE.PointLight(0xff9a40, 18, 13, 1.4); t.position.set(x, 1.8, z); scene.add(t); torches.push(t);
+    bowls.push(new THREE.Vector3(x, FIRE_BASE + 0.1, z));
   }
   function spawnEmber(b, fast) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: EMBER_TEX, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -244,7 +263,11 @@ export function create(container) {
   // board
   const boardG = new THREE.Group(); scene.add(boardG);
   mesh(new THREE.BoxGeometry(9.2, 0.34, 9.2), new THREE.MeshStandardMaterial({ color: 0x3b3833, roughness: 0.95, map: stoneTexture('#6b665e', 'rgba(0,0,0,0.3)', 3) }), 0, -0.21, 0, boardG);
-  mesh(new THREE.BoxGeometry(30, 0.1, 30), new THREE.MeshStandardMaterial({ color: 0x1c1d22, roughness: 1 }), 0, -0.42, 0, boardG);
+  const floorTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); g.fillStyle = '#3a3733'; g.fillRect(0, 0, 256, 256); g.strokeStyle = '#1e1c1a'; g.lineWidth = 4;
+    for (let y = 0; y < 256; y += 64) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); const off = (y / 64) % 2 ? 0 : 64; for (let x = off; x < 256; x += 128) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 64); g.stroke(); } }
+    for (let i = 0; i < 1500; i++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},0.05)`; g.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(7, 7); return t; })();
+  mesh(new THREE.BoxGeometry(40, 0.1, 40), new THREE.MeshStandardMaterial({ color: 0x8a847a, roughness: 0.95, map: floorTex }), 0, -0.42, 0, boardG);
   const lightTile = new THREE.MeshStandardMaterial({ color: 0xB9B3A5, roughness: 0.9, map: stoneTexture('#c7c1b3', 'rgba(90,80,70,0.25)', 21) });
   const darkTile = new THREE.MeshStandardMaterial({ color: 0x5E5A55, roughness: 0.85, map: stoneTexture('#8a857e', 'rgba(20,20,20,0.35)', 34) });
   const tileGeo = new THREE.BoxGeometry(0.985, 0.08, 0.985);
@@ -260,6 +283,89 @@ export function create(container) {
       const m = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ map: textTexture(txt, '#d8d2c4'), transparent: true }));
       m.rotation.x = -Math.PI / 2; m.position.set(x, -0.035, z); boardG.add(m); labels.push(m);
     }
+  }
+
+  /* ---------- the great hall: pillars, banners, moonbeams, dust, rune circle ---------- */
+  const hall = new THREE.Group(); scene.add(hall);
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x6b665e, roughness: 0.95, flatShading: true, map: stoneTexture('#8a857c', 'rgba(0,0,0,0.3)', 51) });
+  function pillar(x, z, h) {
+    mesh(new THREE.BoxGeometry(1.3, 0.5, 1.3), pillarMat, x, -0.12, z, hall);
+    mesh(new THREE.CylinderGeometry(0.42, 0.48, h, 10), pillarMat, x, h / 2, z, hall);
+    for (let i = 0; i < 3; i++) mesh(new THREE.TorusGeometry(0.47, 0.05, 5, 10), pillarMat, x, 0.6 + i * (h / 3), z, hall).rotation.x = Math.PI / 2;
+  }
+  for (const [x, z] of [[-3.4, -7.6], [3.4, -7.6], [-8.2, -6.0], [8.2, -6.0], [-9.4, 0.6], [9.4, 0.6]]) pillar(x, z, 11);
+  // banners with original sigils: a crescent for Moonstone, a flame for Obsidian
+  function bannerTex(bg, fg, kind) {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 320;
+    const g = c.getContext('2d');
+    g.fillStyle = bg; g.beginPath(); g.moveTo(0, 0); g.lineTo(128, 0); g.lineTo(128, 280); g.lineTo(64, 320); g.lineTo(0, 280); g.closePath(); g.fill();
+    g.strokeStyle = fg; g.lineWidth = 5; g.strokeRect(10, 10, 108, 255);
+    g.fillStyle = fg; g.translate(64, 140);
+    if (kind === 'moon') { g.beginPath(); g.arc(0, 0, 36, 0, Math.PI * 2); g.fill(); g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(14, -8, 32, 0, Math.PI * 2); g.fill(); g.globalCompositeOperation = 'source-over'; }
+    else { g.beginPath(); g.moveTo(0, -46); g.bezierCurveTo(28, -10, 34, 10, 22, 30); g.bezierCurveTo(14, 44, -14, 44, -22, 30); g.bezierCurveTo(-30, 14, -16, -4, -6, -12); g.bezierCurveTo(-2, 2, 6, 4, 8, -6); g.bezierCurveTo(10, -20, 4, -34, 0, -46); g.fill(); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
+  const banners = [];
+  for (const [x, tex] of [[-3.4, bannerTex('#1d3550', '#cfe6f5', 'moon')], [3.4, bannerTex('#4a2410', '#ffb35c', 'flame')]]) {
+    const b = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 3.25), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 1, side: THREE.DoubleSide }));
+    b.position.set(x, 2.6, -7.05); hall.add(b); banners.push(b);
+    mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 6), pillarMat, x, 4.25, -7.05, hall).rotation.z = Math.PI / 2;
+  }
+  // moonbeams slanting in from high windows, and the window light they cast on the floor
+  const beamTex = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 256; const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, 'rgba(170,200,235,0)'); gr.addColorStop(0.3, 'rgba(170,200,235,0.55)'); gr.addColorStop(1, 'rgba(170,200,235,0.05)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 256); const h = g.createLinearGradient(0, 0, 64, 0); h.addColorStop(0, 'rgba(0,0,0,1)'); h.addColorStop(0.5, 'rgba(0,0,0,0)'); h.addColorStop(1, 'rgba(0,0,0,1)'); g.globalCompositeOperation = 'destination-out'; g.fillStyle = h; g.fillRect(0, 0, 64, 256); return new THREE.CanvasTexture(c); })();
+  const beamMat = new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, opacity: 0.32 });
+  const beams = [];
+  for (const [x, z, w] of [[-6.5, -3.5, 1.6], [-4.8, 0.5, 1.3], [6.8, -2.0, 1.4]]) {
+    const b = new THREE.Mesh(new THREE.PlaneGeometry(w, 13), beamMat);
+    b.position.set(x, 5.6, z); b.rotation.set(0, Math.PI / 5 * Math.sign(x), Math.sign(x) * 0.5); hall.add(b); beams.push(b);
+  }
+  const windowTex = (() => { const c = document.createElement('canvas'); c.width = 128; c.height = 256; const g = c.getContext('2d'); g.fillStyle = 'rgba(150,190,235,0.55)';
+    for (const x0 of [12, 70]) { g.beginPath(); g.moveTo(x0, 250); g.lineTo(x0, 90); g.quadraticCurveTo(x0 + 23, 20, x0 + 46, 90); g.lineTo(x0 + 46, 250); g.closePath(); g.fill(); }
+    g.globalCompositeOperation = 'destination-out'; g.fillRect(0, 160, 128, 6); g.fillRect(33, 60, 4, 200); g.fillRect(91, 60, 4, 200); return new THREE.CanvasTexture(c); })();
+  for (const [x, z, r] of [[-6.6, -2.4, 0.5], [6.9, -0.6, -0.4]]) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 4.2), new THREE.MeshBasicMaterial({ map: windowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.6 }));
+    w.rotation.set(-Math.PI / 2, 0, r); w.position.set(x, -0.355, z); hall.add(w); beams.push(w);
+  }
+  // dust motes drifting through the moonlight
+  const MOTES = 260, motePos = new Float32Array(MOTES * 3), moteSeed = [];
+  for (let i = 0; i < MOTES; i++) { motePos[i * 3] = (Math.random() - 0.5) * 18; motePos[i * 3 + 1] = Math.random() * 6; motePos[i * 3 + 2] = -7 + Math.random() * 12; moteSeed.push(Math.random() * 10); }
+  const moteGeo = new THREE.BufferGeometry(); moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
+  const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ color: 0xcfe0f5, size: 0.045, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+  hall.add(motes);
+  // the rune circle on the floor and a glowing inlay around the board; both follow the turn
+  const runeTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 1024; const g = c.getContext('2d');
+    g.translate(512, 512); g.strokeStyle = '#ffffff'; g.lineCap = 'round';
+    g.lineWidth = 6; g.beginPath(); g.arc(0, 0, 500, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 430, 0, Math.PI * 2); g.stroke();
+    let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const N = 40;
+    for (let i = 0; i < N; i++) { // original rune-like glyphs, made from a few strokes each
+      g.save(); g.rotate((i / N) * Math.PI * 2); g.translate(0, -465); g.lineWidth = 4; g.beginPath();
+      g.moveTo(0, -22); g.lineTo(0, 22);
+      const k = 1 + Math.floor(rnd() * 3);
+      for (let j = 0; j < k; j++) { const y = -18 + rnd() * 36, d = rnd() < 0.5 ? -1 : 1; g.moveTo(0, y); g.lineTo(d * (8 + rnd() * 10), y + (rnd() - 0.5) * 20); }
+      if (rnd() < 0.4) { g.moveTo(-8, 22); g.lineTo(8, 22); }
+      g.stroke(); g.restore();
+    }
+    return new THREE.CanvasTexture(c);
+  })();
+  const runeMat = new THREE.MeshBasicMaterial({ map: runeTex, color: 0x7FB8D8, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 });
+  const runeCircle = new THREE.Mesh(new THREE.PlaneGeometry(15.5, 15.5), runeMat);
+  runeCircle.rotation.x = -Math.PI / 2; runeCircle.position.y = -0.36; hall.add(runeCircle);
+  const inlayMat = new THREE.MeshBasicMaterial({ color: 0x7FB8D8, transparent: true, opacity: 0.8 });
+  for (const [x, z, w, d] of [[0, 4.62, 9.3, 0.04], [0, -4.62, 9.3, 0.04], [4.62, 0, 0.04, 9.3], [-4.62, 0, 0.04, 9.3]]) mesh(new THREE.BoxGeometry(w, 0.03, d), inlayMat, x, -0.03, z, hall).castShadow = false;
+  const runeState = { color: new THREE.Color(0x7FB8D8), target: new THREE.Color(0x7FB8D8), glow: 0.55, targetGlow: 0.55, flash: 0 };
+  const TURN_COLORS = { w: 0x7FB8D8, b: 0xF28E2B };
+  function setTurn(side, inCheck) { runeState.target.setHex(inCheck ? 0xff6a1a : TURN_COLORS[side] || 0x7FB8D8); runeState.targetGlow = inCheck ? 0.95 : 0.55; }
+  function setAlert(kind, side) { if (kind === 'mate') { runeState.target.setHex(TURN_COLORS[side] || 0xffffff); runeState.targetGlow = 1.4; flare(1.6); } }
+  /* Thunder: the moonlight flashes twice and the hall rumbles. */
+  const hemiLight = scene.children.find((o) => o.isHemisphereLight);
+  async function thunder() {
+    if (reducedMotion()) return;
+    audio('rumble');
+    for (const [on, off] of [[90, 120], [60, 0]]) { runeState.flash = 1; await sleep(on); runeState.flash = 0.2; await sleep(off); }
+    runeState.flash = 0;
   }
 
   const marksG = new THREE.Group(); scene.add(marksG);
@@ -360,15 +466,21 @@ export function create(container) {
     MAT.w.rune.emissiveIntensity = thinking.w ? pulse : 2.2;
     MAT.b.rune.emissiveIntensity = thinking.b ? pulse : 2.2;
     fireBoost *= Math.pow(0.25, dt);
-    torches.forEach((t, i) => { t.intensity = 13 + Math.sin(tsec * 9 + i * 2) * 1.6 + Math.sin(tsec * 23 + i) * 1.1 + fireBoost * 22; });
+    torches.forEach((t, i) => { t.intensity = 17 + Math.sin(tsec * 9 + i * 2) * 2.2 + Math.sin(tsec * 23 + i) * 1.5 + fireBoost * 30; });
     flames.forEach((f, i) => {
       const k = 1 + Math.sin(tsec * 11 + i * 1.7) * 0.12 + Math.sin(tsec * 27 + i) * 0.07 + fireBoost * 0.7;
       const w = 1 / Math.sqrt(k) + fireBoost * 0.15;
-      f.scale.set(w, k, w); f.position.y = 0.2 + (f.userData.h * k) / 2;
+      f.scale.set(w, k, w); f.position.y = FIRE_BASE + (f.userData.h * k) / 2;
       f.rotation.y = tsec * (i % 2 ? 1.3 : -0.9);
       f.rotation.z = Math.sin(tsec * 3 + i) * 0.06;
     });
-    if (!reducedMotion() && Math.random() < dt * 14) spawnEmber(bowls[Math.floor(Math.random() * bowls.length)]);
+    if (!reducedMotion() && Math.random() < dt * 22) spawnEmber(bowls[Math.floor(Math.random() * bowls.length)]);
+    if (!reducedMotion() && Math.random() < dt * 5) {
+      const b = bowls[Math.floor(Math.random() * bowls.length)];
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: DUST_TEX, color: 0x3a3632, transparent: true, depthWrite: false, opacity: 0.35 }));
+      sp.position.set(b.x + (Math.random() - 0.5) * 0.3, b.y + 2.0, b.z + (Math.random() - 0.5) * 0.3); sp.scale.setScalar(0.5);
+      fxG.add(sp); dusts.push({ sp, v: new THREE.Vector3((Math.random() - 0.5) * 0.15, 0.5 + Math.random() * 0.3, (Math.random() - 0.5) * 0.15), life: 0, max: 2.6, smoke: true });
+    }
     for (let i = embers.length - 1; i >= 0; i--) {
       const e = embers[i]; e.life += dt;
       e.sp.position.addScaledVector(e.v, dt); e.sp.position.x += Math.sin(tsec * 3 + e.ph) * dt * 0.15;
@@ -391,10 +503,23 @@ export function create(container) {
     for (let i = dusts.length - 1; i >= 0; i--) {
       const d = dusts[i]; d.life += dt;
       d.sp.position.addScaledVector(d.v, dt); d.v.multiplyScalar(0.96);
-      d.sp.scale.setScalar(0.25 + d.life * 0.9);
-      d.sp.material.opacity = Math.max(0, 0.7 * (1 - d.life / d.max));
+      d.sp.scale.setScalar(d.smoke ? 0.5 + d.life * 0.8 : 0.25 + d.life * 0.9);
+      d.sp.material.opacity = Math.max(0, (d.smoke ? 0.35 : 0.7) * (1 - d.life / d.max));
       if (d.life > d.max) { fxG.remove(d.sp); d.sp.material.dispose(); dusts.splice(i, 1); }
     }
+    // hall: dust motes drift, banners sway, runes follow the turn, thunder flashes
+    const mp = moteGeo.attributes.position.array;
+    for (let i = 0; i < MOTES; i++) { mp[i * 3 + 1] += dt * 0.08; mp[i * 3] += Math.sin(tsec * 0.5 + moteSeed[i]) * dt * 0.06; if (mp[i * 3 + 1] > 6) mp[i * 3 + 1] = 0; }
+    moteGeo.attributes.position.needsUpdate = true;
+    banners.forEach((b, i) => { b.rotation.y = Math.sin(tsec * 0.7 + i * 2) * 0.06; b.rotation.x = Math.sin(tsec * 0.9 + i) * 0.03; });
+    runeState.color.lerp(runeState.target, 1 - Math.pow(0.02, dt));
+    runeState.glow += (runeState.targetGlow - runeState.glow) * (1 - Math.pow(0.02, dt));
+    const breathe = 0.85 + Math.sin(tsec * 1.4) * 0.15;
+    runeMat.color.copy(runeState.color); runeMat.opacity = Math.min(1, runeState.glow * breathe);
+    inlayMat.color.copy(runeState.color); inlayMat.opacity = Math.min(1, 0.45 + runeState.glow * 0.5);
+    runeCircle.rotation.z += dt * 0.03;
+    beamMat.opacity = 0.32 + runeState.flash * 0.9;
+    if (hemiLight) hemiLight.intensity = 1.35 + runeState.flash * 3.5;
     // camera (smooth follow + impact shake)
     const ct = camTarget();
     camState.pos.lerp(ct.pos, 1 - Math.pow(0.002, dt));
@@ -726,6 +851,26 @@ export function create(container) {
   }
   async function topple(kingSq) { return surrender(kingSq); }
 
+  /* At the start of a game the armies rise out of the board, shake off the dust and stand ready. */
+  async function intro() {
+    if (reducedMotion()) return;
+    const list = [...pieceAt.entries()];
+    for (const [, o] of list) { o.position.y = -2.1; o.userData.busy = true; }
+    audio('rumble'); shake(0.05);
+    const near = orient === 'w' ? 7 : 0;
+    await Promise.all(list.map(([sq, o]) => (async () => {
+      const row = sq >> 3, dist = Math.min(Math.abs(row - near), Math.abs(row - (7 - near)));
+      await sleep(dist * 140 + (sq & 7) * 35 + Math.random() * 80);
+      puff(o.position, 3, 0.4);
+      await tween(620, (t) => { o.position.y = -2.1 + 2.1 * t; }, ease.back);
+      o.position.y = 0;
+      const b = o.userData.body;
+      await tween(260, (t) => { b.rotation.z = Math.sin(t * Math.PI * 3) * 0.06 * (1 - t); });
+      o.userData.busy = false;
+    })()));
+    audio('thud'); shake(0.06);
+  }
+
   function setThinking(side, on) { thinking[side] = !!on; }
 
   function showArrow(from, to) {
@@ -746,7 +891,7 @@ export function create(container) {
   return {
     el, is3D: true, setPosition, setOrientation, setView, mark, clearMarks, squareFromEvent, startDrag, moveDrag, endDrag, dragging,
     lift, relax, animateMove, topple, surrender, bow, pulseCheck, checkGuard, setThinking, showArrow,
-    flare, get orientation() { return orient; }, get view() { return view; },
+    flare, intro, setTurn, setAlert, thunder, get orientation() { return orient; }, get view() { return view; },
   };
 }
 
