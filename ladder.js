@@ -82,44 +82,91 @@
     const res = await fetch(`${c.supabaseUrl.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '')}/rest/v1/${path}`, Object.assign({}, init, {
       headers: Object.assign(headers, (init || {}).headers),
     }));
-    if (!res.ok) throw new Error(`Supabase ${res.status}`);
-    return res.status === 204 || res.status === 201 ? null : res.json();
+    if (!res.ok) {
+      let msg = `Supabase ${res.status}`;
+      try { const j = await res.json(); if (j && j.message) msg = j.message; } catch (e) { /* ignore */ }
+      const err = new Error(msg); err.status = res.status; throw err;
+    }
+    if (init && init.count) return { rows: await res.json(), range: res.headers.get('content-range') };
+    return res.status === 204 ? null : res.json();
   }
+  const countFrom = (range) => { const m = /\/(\d+)$/.exec(range || ''); return m ? Number(m[1]) : 0; };
 
   let mode = live() ? 'live' : 'local';
 
-  async function loadAll() {
-    const local = store.get(LS_KEY, []);
-    if (!live()) { mode = 'local'; return local; }
-    try {
-      const rows = [];
-      for (let offset = 0; offset < 20000; offset += 1000) {
-        const page = await rest(`games?select=*&order=created_at.asc&limit=1000&offset=${offset}`);
-        rows.push(...page);
-        if (page.length < 1000) break;
-      }
-      mode = 'live';
-      return rows;
-    } catch (e) {
-      mode = 'local';
-      return local;
+  /* Everything the rating tile and leaderboard need, in one shape for both modes:
+     { mode, ranked: [{player_id, handle, rating, games, best, rank}], totalRanked, today: [{player_id, handle, gain, games}],
+       me: {rating, games, w, d, l, best, rank, start} | null, history: [{created_at, level, player_color, result, before, after, delta}] } */
+  async function board(playerId, fallbackStart) {
+    if (live()) {
+      try {
+        const cols = 'player_id,handle,rating,games,wins,draws,losses,best_level,start_rating';
+        const top = await rest(`players?select=${cols}&games=gte.${PROVISIONAL}&order=rating.desc,games.desc&limit=10`, { count: true, headers: { Prefer: 'count=exact' } });
+        const meRows = await rest(`players?select=${cols}&player_id=eq.${encodeURIComponent(playerId)}`);
+        const today = await rest('today_board?select=player_id,handle,gain,games&order=gain.desc&limit=10');
+        const hist = await rest(`games?select=created_at,level,player_color,result,rating_before,rating_after&player_id=eq.${encodeURIComponent(playerId)}&order=created_at.asc&limit=500`);
+        const m = meRows[0] || null;
+        let me = null;
+        if (m) {
+          me = { rating: m.rating, games: m.games, w: m.wins, d: m.draws, l: m.losses, best: m.best_level, start: m.start_rating, rank: null };
+          if (m.games >= PROVISIONAL) {
+            const above = await rest(`players?select=player_id&games=gte.${PROVISIONAL}&rating=gt.${m.rating}&limit=1`, { count: true, headers: { Prefer: 'count=exact' } });
+            me.rank = countFrom(above.range) + 1;
+          }
+        }
+        mode = 'live';
+        return {
+          mode,
+          ranked: top.rows.map((p, i) => ({ player_id: p.player_id, handle: p.handle, rating: p.rating, games: p.games, best: p.best_level, rank: i + 1 })),
+          totalRanked: countFrom(top.range),
+          today: today.map((t) => ({ player_id: t.player_id, handle: t.handle, gain: t.gain, games: t.games })),
+          me,
+          history: hist.filter((h) => h.rating_after != null).map((h) => ({ created_at: h.created_at, level: h.level, player_color: h.player_color, result: h.result, before: h.rating_before, after: h.rating_after, delta: h.rating_after - h.rating_before })),
+        };
+      } catch (e) { mode = 'local'; }
     }
+    // LOCAL: everything comes from this browser's saved games
+    const data = compute(store.get(LS_KEY, []));
+    const p = data.players.get(playerId);
+    return {
+      mode: 'local',
+      ranked: data.ranked.slice(0, 10).map((q) => ({ player_id: q.player_id, handle: q.handle, rating: q.rating, games: q.games, best: q.best, rank: q.rank })),
+      totalRanked: data.ranked.length,
+      today: data.today.slice(0, 10).map((q) => ({ player_id: q.player_id, handle: q.handle, gain: q.today, games: q.history.length })),
+      me: p ? { rating: p.rating, games: p.games, w: p.w, d: p.d, l: p.l, best: p.best, start: p.start, rank: p.rank || null } : null,
+      history: p ? p.history.map((h) => ({ created_at: h.game.created_at, level: h.game.level, player_color: h.game.player_color, result: h.game.result, before: h.before, after: h.after, delta: h.delta })) : [],
+    };
   }
 
-  async function save(record) {
+  /* Save a finished game. LIVE: through the submit_game function, which checks the secret and rates the game on the server. */
+  async function save(record, secret) {
     const local = store.get(LS_KEY, []);
     record.created_at = record.created_at || new Date().toISOString();
     local.push(record); store.set(LS_KEY, local);
     if (!live()) { mode = 'local'; return { mode }; }
     try {
-      const body = Object.assign({}, record); delete body.created_at; // the server stamps the time
-      await rest('games', { method: 'POST', body: JSON.stringify(body), headers: { Prefer: 'return=minimal' } });
+      const r = await rest('rpc/submit_game', { method: 'POST', body: JSON.stringify({
+        p_player_id: record.player_id, p_secret: secret, p_handle: record.handle, p_level: record.level,
+        p_player_color: record.player_color, p_result: record.result, p_termination: record.termination,
+        p_ply_count: record.ply_count, p_pgn: record.pgn, p_start_rating: record.start_rating,
+        p_clock: record.clock, p_app_version: record.app_version,
+      }) });
       mode = 'live';
-    } catch (e) { mode = 'local'; }
-    return { mode };
+      return { mode, before: r && r.rating_before, after: r && r.rating_after };
+    } catch (e) {
+      // a refused save (wrong secret, rate limit, bad game) stays refused; a network failure falls back to local
+      if (e.status && e.status < 500) return { mode: 'live', error: e.message };
+      mode = 'local'; return { mode };
+    }
   }
 
-  const api = { verify, compute, preview, loadAll, save, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
+  async function rename(playerId, secret, handle) {
+    if (!live()) return true;
+    try { await rest('rpc/rename_player', { method: 'POST', body: JSON.stringify({ p_player_id: playerId, p_secret: secret, p_handle: handle }) }); return true; }
+    catch (e) { return false; }
+  }
+
+  const api = { verify, compute, preview, board, save, rename, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SBLadder = api;
 })(typeof window !== 'undefined' ? window : this);

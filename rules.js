@@ -245,8 +245,16 @@
           && (!o.promotion || typeOf(o.promotion) === typeOf(input.promotion || 'Q')));
       } else {
         const txt = String(input).trim();
-        const clean = (x) => x.replace(/[+#?!]/g, '').replace(/0/g, 'O').toLowerCase();
-        m = legal.find((o) => clean(this.san(o, legal)) === clean(txt));
+        // Normalize without losing case: "Bxc6" (bishop) and "bxc6" (b-pawn) are different moves.
+        const norm = (x) => x.replace(/[+#?!]/g, '').replace(/e\.p\./gi, '').replace(/0/g, 'O').replace(/\s+/g, '')
+          .replace(/^([a-h](?:x[a-h])?[18])=?([QRBNqrbn])$/, (mm, sq, p) => `${sq}=${p.toUpperCase()}`);
+        const sans = legal.map((o) => [o, norm(this.san(o, legal))]);
+        const want = norm(txt);
+        m = (sans.find(([, s]) => s === want) || [])[0] || null;
+        if (!m) { // forgiving fallback for casual typing ("nf3", "o-o"), only when it can mean exactly one move
+          const loose = sans.filter(([, s]) => s.toLowerCase() === want.toLowerCase());
+          if (loose.length === 1) m = loose[0][0];
+        }
         if (!m && /^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(txt)) {
           const from = sqIndex(txt.slice(0, 2).toLowerCase()), to = sqIndex(txt.slice(2, 4).toLowerCase());
           const promo = txt[4] ? txt[4].toUpperCase() : 'Q';
@@ -303,6 +311,32 @@
       const parts = [];
       this.sanHistory.forEach((s, i) => { if (i % 2 === 0) parts.push(`${i / 2 + 1}.`); parts.push(s); });
       return parts.join(' ');
+    }
+
+    /* Squares the piece on sq attacks (pins ignored): used to show which pieces just came under threat. */
+    attacksFrom(sq) {
+      const p = this.board[sq]; if (!p) return [];
+      const r = sq >> 3, c = sq & 7, t = typeOf(p), col = colorOf(p), out = [];
+      const push = (rr, cc) => { if (onBoard(rr, cc)) out.push(rr * 8 + cc); };
+      if (t === 'P') { const dir = col === 'w' ? -1 : 1; push(r + dir, c - 1); push(r + dir, c + 1); }
+      else if (t === 'N' || t === 'K') for (const [dr, dc] of t === 'N' ? KNIGHT : KING) push(r + dr, c + dc);
+      else {
+        const dirs = t === 'B' ? DIAG : t === 'R' ? ORTHO : DIAG.concat(ORTHO);
+        for (const [dr, dc] of dirs) {
+          let rr = r + dr, cc = c + dc;
+          while (onBoard(rr, cc)) { out.push(rr * 8 + cc); if (this.board[rr * 8 + cc]) break; rr += dr; cc += dc; }
+        }
+      }
+      return out;
+    }
+
+    /* False when this side has only a king, or king plus one bishop or knight: it can never checkmate.
+       (Used so a player who runs out of time draws instead of losing when the opponent can't win.) */
+    canMate(color) {
+      const mine = this.board.filter((p) => p && colorOf(p) === color && typeOf(p) !== 'K').map(typeOf);
+      if (mine.length === 0) return false;
+      if (mine.length === 1 && (mine[0] === 'B' || mine[0] === 'N')) return false;
+      return true;
     }
 
     perft(depth) {

@@ -72,6 +72,13 @@ function mesh(geo, mat, x, y, z, parent) {
 function eyes(M, parent, y, z, spread, size) {
   for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(size || 0.022, 8, 6), M.rune, sx * (spread || 0.045), y, z, parent).castShadow = false;
 }
+function limb(parent, M, a, b, r) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A), len = d.length();
+  const m = mesh(new THREE.CylinderGeometry(r, r * 0.9, len, 7), M.stone, 0, 0, 0, parent);
+  m.position.copy(A.clone().add(B).multiplyScalar(0.5));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  return m;
+}
 function pivot(parent, x, y, z) { const p = new THREE.Group(); p.position.set(x, y, z); parent.add(p); return p; }
 
 function buildPiece(type, side, MAT) {
@@ -96,10 +103,14 @@ function buildPiece(type, side, MAT) {
       mesh(new THREE.SphereGeometry(0.118, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2.4), M.trim, 0, 0.012, 0, head);
       mesh(new THREE.BoxGeometry(0.025, 0.07, 0.03), M.trim, 0, -0.01, 0.105, head);
       eyes(M, head, 0.0, 0.098, 0.042, 0.02);
-      const shield = mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 12), M.trim, -0.15, 0.24, 0.1, body); shield.rotation.x = Math.PI / 2;
-      weapon = pivot(body, 0.16, 0.32, 0.02);
-      mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.24, 6), M.trim, 0, -0.06, 0.08, weapon).rotation.x = 0.9;
-      mesh(new THREE.DodecahedronGeometry(0.045), M.stone, 0, 0.0, 0.16, weapon);
+      for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(0.055, 8, 6), M.trim, sx * 0.14, 0.33, 0, body);
+      limb(body, M, [-0.15, 0.32, 0], [-0.17, 0.22, 0.08], 0.03);
+      const shield = mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.035, 14), M.trim, -0.17, 0.24, 0.12, body); shield.rotation.x = Math.PI / 2;
+      mesh(new THREE.SphereGeometry(0.035, 6, 4), M.stone, -0.17, 0.24, 0.145, body);
+      weapon = pivot(body, 0.15, 0.32, 0.02);
+      limb(weapon, M, [0, 0, 0], [0.04, -0.12, 0.08], 0.03);
+      mesh(new THREE.CylinderGeometry(0.02, 0.024, 0.34, 6), M.trim, 0.04, 0.02, 0.1, weapon).rotation.x = 0.2;
+      mesh(new THREE.DodecahedronGeometry(0.07), M.stone, 0.04, 0.19, 0.13, weapon);
       break;
     }
     case 'R': { // a living castle tower: battlements on top, arrow-slit eyes, stone fists and a shield
@@ -112,9 +123,11 @@ function buildPiece(type, side, MAT) {
       mesh(new THREE.BoxGeometry(0.2, 0.06, 0.03), M.dark, 0, 0, 0.2, head);
       eyes(M, head, 0, 0.215, 0.055, 0.022);
       mesh(new THREE.BoxGeometry(0.04, 0.1, 0.03), M.dark, 0, -0.18, 0.205, head); // door slit
-      mesh(new THREE.DodecahedronGeometry(0.08), M.stone, 0.29, 0.32, 0.05, body);
+      for (const sx of [-1, 1]) { const arm = mesh(new THREE.BoxGeometry(0.1, 0.28, 0.11), M.stone, sx * 0.27, 0.42, 0.02, body); arm.rotation.z = sx * 0.12; }
+      mesh(new THREE.DodecahedronGeometry(0.09), M.stone, 0.29, 0.26, 0.06, body);
       weapon = pivot(body, -0.2, 0.42, 0.2);
-      mesh(new THREE.BoxGeometry(0.24, 0.32, 0.05), M.trim, 0, 0, 0, weapon);
+      mesh(new THREE.BoxGeometry(0.3, 0.42, 0.06), M.trim, 0, 0, 0, weapon);
+      mesh(new THREE.BoxGeometry(0.3, 0.04, 0.07), M.stone, 0, 0.15, 0.005, weapon);
       mesh(new THREE.BoxGeometry(0.06, 0.06, 0.03), M.rune, 0, 0.05, 0.035, weapon).castShadow = false;
       break;
     }
@@ -162,9 +175,13 @@ function buildPiece(type, side, MAT) {
       const slit = mesh(new THREE.BoxGeometry(0.02, 0.16, 0.25), M.dark, 0.03, 0.2, 0.02, head); slit.rotation.z = -0.55;
       mesh(new THREE.SphereGeometry(0.035, 8, 6), M.trim, 0, 0.38, 0, head);
       eyes(M, head, 0.07, 0.115, 0.036, 0.018);
+      for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(0.05, 8, 6), M.trim, sx * 0.12, 0.62, 0, body);
+      limb(body, M, [-0.12, 0.6, 0], [-0.08, 0.4, 0.1], 0.03);
       weapon = pivot(body, 0.22, 0.56, 0.04);
-      mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.9, 6), M.trim, 0, -0.1, 0, weapon);
-      mesh(new THREE.IcosahedronGeometry(0.06), M.rune, 0, 0.38, 0, weapon).castShadow = false;
+      limb(weapon, M, [-0.1, 0.05, -0.04], [0, -0.05, 0], 0.03);
+      mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.05, 6), M.trim, 0, -0.06, 0, weapon);
+      mesh(new THREE.IcosahedronGeometry(0.085), M.rune, 0, 0.5, 0, weapon).castShadow = false;
+      mesh(new THREE.TorusGeometry(0.11, 0.012, 5, 14), M.trim, 0, 0.5, 0, weapon);
       break;
     }
     case 'Q': { // sovereign: tall robe, spiked coronet, long blade
@@ -177,11 +194,15 @@ function buildPiece(type, side, MAT) {
       for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const sp = mesh(new THREE.ConeGeometry(0.025, 0.1, 5), M.trim, Math.sin(a) * 0.115, 0.17, Math.cos(a) * 0.115, head); sp.rotation.set(Math.cos(a) * 0.35, 0, -Math.sin(a) * 0.35); }
       mesh(new THREE.SphereGeometry(0.035, 8, 6), M.rune, 0, 0.2, 0, head).castShadow = false;
       eyes(M, head, 0.0, 0.095, 0.038, 0.019);
-      weapon = pivot(body, 0.19, 0.72, 0.02);
-      mesh(new THREE.BoxGeometry(0.032, 0.58, 0.012), M.trim, 0, 0.33, 0.06, weapon);
-      mesh(new THREE.BoxGeometry(0.15, 0.03, 0.04), M.stone, 0, 0.04, 0.06, weapon);
-      mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.09, 6), M.stone, 0, -0.02, 0.06, weapon);
-      weapon.rotation.x = -0.35; weapon.rotation.z = -0.25;
+      for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(0.06, 8, 6), M.trim, sx * 0.15, 0.76, 0, body);
+      limb(body, M, [-0.15, 0.74, 0], [-0.13, 0.52, 0.08], 0.032);
+      weapon = pivot(body, 0.17, 0.62, 0.06);
+      limb(weapon, M, [-0.02, 0.13, -0.06], [0, 0, 0], 0.032);
+      mesh(new THREE.BoxGeometry(0.045, 0.78, 0.014), M.trim, 0, 0.44, 0, weapon);
+      mesh(new THREE.ConeGeometry(0.032, 0.08, 4), M.trim, 0, 0.87, 0, weapon);
+      mesh(new THREE.BoxGeometry(0.2, 0.035, 0.045), M.stone, 0, 0.04, 0, weapon);
+      mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.1, 6), M.stone, 0, -0.03, 0, weapon);
+      weapon.rotation.x = -0.12; weapon.rotation.z = -0.1;
       break;
     }
     case 'K': { // king: tallest, broad robe, crown topped with a stone cross, great sword
@@ -195,13 +216,17 @@ function buildPiece(type, side, MAT) {
       mesh(new THREE.BoxGeometry(0.17, 0.05, 0.05), M.trim, 0, 0.33, 0, head);
       mesh(new THREE.OctahedronGeometry(0.028), M.rune, 0, 0.33, 0.03, head).castShadow = false;
       eyes(M, head, 0.0, 0.097, 0.043, 0.021);
+      for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(0.075, 8, 6), M.trim, sx * 0.18, 0.84, 0, body);
       weapon = pivot(body, 0, 0.58, 0.25);
-      mesh(new THREE.BoxGeometry(0.045, 0.58, 0.02), M.trim, 0, -0.25, 0, weapon);
-      mesh(new THREE.BoxGeometry(0.22, 0.035, 0.05), M.stone, 0, 0.05, 0, weapon);
-      mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.12, 6), M.stone, 0, 0.13, 0, weapon);
+      for (const sx of [-1, 1]) limb(weapon, M, [sx * 0.17, 0.24, -0.24], [sx * 0.03, 0.12, 0], 0.035);
+      mesh(new THREE.BoxGeometry(0.07, 0.66, 0.022), M.trim, 0, -0.27, 0, weapon);
+      mesh(new THREE.BoxGeometry(0.28, 0.04, 0.055), M.stone, 0, 0.06, 0, weapon);
+      mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.14, 6), M.stone, 0, 0.14, 0, weapon);
+      mesh(new THREE.OctahedronGeometry(0.035), M.rune, 0, 0.23, 0, weapon).castShadow = false;
       break;
     }
   }
+  bob.name = 'bob'; body.name = 'body'; head.name = 'head'; if (weapon !== head) weapon.name = 'weapon';
   root.userData = { type, side, bob, body, head, weapon, height: height * 1.12, baseWeaponRot: weapon.rotation.clone(), phase: Math.random() * 10, facing: side === 'w' ? Math.PI : 0 };
   root.rotation.y = root.userData.facing;
   return root;
@@ -211,7 +236,9 @@ function buildPiece(type, side, MAT) {
 export function create(container) {
   const MAT = makeMaterials();
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // quality tier: phones/tablets and small screens get lighter settings
+  const LITE = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || Math.min(screen.width, screen.height) < 820;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, LITE ? 1.25 : 1.5));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   container.innerHTML = ''; container.appendChild(renderer.domElement);
@@ -228,7 +255,7 @@ export function create(container) {
   scene.add(new THREE.HemisphereLight(0xc8d2e6, 0x3a332c, 1.35));
   const key = new THREE.DirectionalLight(0xfff1dc, 2.4);
   key.position.set(-5, 10, 4); key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048); key.shadow.camera.left = -6; key.shadow.camera.right = 6; key.shadow.camera.top = 6; key.shadow.camera.bottom = -6;
+  key.shadow.mapSize.set(LITE ? 1024 : 2048, LITE ? 1024 : 2048); key.shadow.camera.left = -6; key.shadow.camera.right = 6; key.shadow.camera.top = 6; key.shadow.camera.bottom = -6;
   key.shadow.bias = -0.0008; key.shadow.normalBias = 0.02;
   scene.add(key);
   const rim = new THREE.DirectionalLight(0x9fd0ee, 1.6); rim.position.set(5, 6, -7); scene.add(rim);
@@ -372,7 +399,7 @@ export function create(container) {
   const runeState = { color: new THREE.Color(0x7FB8D8), target: new THREE.Color(0x7FB8D8), glow: 0.85, targetGlow: 0.85, flash: 0, pulse: 0, side: 'w' };
   const TURN_COLORS = { w: 0x7FB8D8, b: 0xF28E2B };
   function setTurn(side, inCheck) {
-    if (side !== runeState.side) { runeState.pulse = 1; runeState.side = side; audio('turn'); } // the circle flares when the turn passes
+    if (side !== runeState.side) { runeState.side = side; audio('turn'); } // the runes change color (no flare) when the turn passes
     runeState.target.setHex(inCheck ? 0xff6a1a : TURN_COLORS[side] || 0x7FB8D8); runeState.targetGlow = inCheck ? 1.0 : 0.85;
   }
   function setAlert(kind, side) { if (kind === 'mate') { runeState.target.setHex(TURN_COLORS[side] || 0xffffff); runeState.targetGlow = 1.4; flare(1.6); } }
@@ -469,8 +496,14 @@ export function create(container) {
   /* ---------- main loop ---------- */
   const clock = new THREE.Clock();
   let thinking = { w: false, b: false };
+  let hitStopUntil = 0, frameNo = 0, camOverride = null, cinematic = false;
   function frame() {
+    requestAnimationFrame(frame);
+    // when nothing is moving, draw every other frame (30 fps): cooler laptops, longer phone batteries
+    const busy = tasks.size > 0 || shards.length > 0 || drag || camOverride || shakeAmp > 0.002;
+    if (!busy && (++frameNo & 1)) return;
     const dt = Math.min(0.05, clock.getDelta()), now = performance.now(), tsec = now / 1000;
+    if (now < hitStopUntil) { for (const t of tasks) t.t0 += dt * 1000; } // hit-stop: everything freezes for a split second on impact
     for (const t of [...tasks]) {
       const p = Math.min(1, (now - t.t0) / t.ms);
       t.fn(t.e(p));
@@ -492,7 +525,7 @@ export function create(container) {
       f.scale.set(f.userData.w * w, f.userData.h * k, 1); f.position.y = FIRE_BASE - 0.1 + (f.userData.h * k) / 2;
       f.position.x = f.userData.x + Math.sin(tsec * 5 + i * 1.3) * 0.04 * (1 + (i % 4));
     });
-    if (!reducedMotion() && Math.random() < dt * 22) spawnEmber(bowls[Math.floor(Math.random() * bowls.length)]);
+    if (!reducedMotion() && Math.random() < dt * (LITE ? 10 : 22)) spawnEmber(bowls[Math.floor(Math.random() * bowls.length)]);
     if (!reducedMotion() && Math.random() < dt * 5) {
       const b = bowls[Math.floor(Math.random() * bowls.length)];
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: DUST_TEX, color: 0x3a3632, transparent: true, depthWrite: false, opacity: 0.35 }));
@@ -533,35 +566,51 @@ export function create(container) {
     runeState.color.lerp(runeState.target, 1 - Math.pow(0.0005, dt));
     runeState.glow += (runeState.targetGlow - runeState.glow) * (1 - Math.pow(0.02, dt));
     const breathe = 0.85 + Math.sin(tsec * 1.4) * 0.15;
-    runeState.pulse *= Math.pow(0.12, dt);
-    runeMat.color.copy(runeState.color); runeMat.opacity = Math.min(1, runeState.glow * breathe + runeState.pulse * 0.8);
-    const sc = 1 + runeState.pulse * 0.04; runeCircle.scale.set(sc, sc, 1);
-    runeCircle.rotation.z += dt * (0.03 + runeState.pulse * 0.6);
+    runeMat.color.copy(runeState.color); runeMat.opacity = Math.min(1, runeState.glow * breathe);
+    runeCircle.rotation.z += dt * 0.03;
     beamMat.opacity = 0.32 + runeState.flash * 0.9;
     if (hemiLight) hemiLight.intensity = 1.35 + runeState.flash * 3.5;
     // camera (smooth follow + impact shake)
-    const ct = camTarget();
-    camState.pos.lerp(ct.pos, 1 - Math.pow(0.002, dt));
-    camState.look.lerp(ct.look, 1 - Math.pow(0.002, dt));
+    const ct = camOverride || camTarget();
+    const k = camOverride ? 0.03 : 0.002;
+    camState.pos.lerp(ct.pos, 1 - Math.pow(k, dt));
+    camState.look.lerp(ct.look, 1 - Math.pow(k, dt));
     camera.position.copy(camState.pos);
     if (shakeAmp > 0.001) { camera.position.x += (Math.random() - 0.5) * shakeAmp; camera.position.y += (Math.random() - 0.5) * shakeAmp; shakeAmp *= Math.pow(0.004, dt); }
     camera.lookAt(camState.look);
     renderer.render(scene, camera);
-    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
   const shake = (a) => { if (!reducedMotion()) shakeAmp = Math.max(shakeAmp, a); };
 
   /* ---------- position ---------- */
+  let gen = 0; // bumps on every rebuild so an animation from an old game can't touch the new one
   function clearPieces() {
+    gen++;
     for (const o of [...piecesG.children]) piecesG.remove(o); pieceAt.clear();
     for (const o of [...fxG.children]) fxG.remove(o); shards.length = 0; dusts.length = 0; // sweep away old rubble
   }
   function place(p, sq) {
     const side = p === p.toUpperCase() ? 'w' : 'b';
-    const obj = buildPiece(p.toUpperCase(), side, MAT);
+    const obj = makePiece(p.toUpperCase(), side);
     obj.position.copy(sqPos(sq)); obj.rotation.y = restFacing(obj); piecesG.add(obj); pieceAt.set(sq, obj);
     return obj;
+  }
+  const protos = {};
+  function makePiece(type, side) {
+    const key = type + side;
+    if (!protos[key]) {
+      const proto = buildPiece(type, side, MAT);
+      const u = proto.userData;
+      proto.userData = { type, side, height: u.height, facing: u.facing, weaponIsHead: u.weapon === u.head };
+      protos[key] = proto;
+    }
+    const c = protos[key].clone(); // geometries and materials are shared, not copied
+    const u = c.userData;
+    u.bob = c.getObjectByName('bob'); u.body = c.getObjectByName('body'); u.head = c.getObjectByName('head');
+    u.weapon = u.weaponIsHead ? u.head : c.getObjectByName('weapon');
+    u.baseWeaponRot = u.weapon.rotation.clone(); u.phase = Math.random() * 10;
+    return c;
   }
   function setPosition(board) { clearPieces(); board.forEach((p, sq) => { if (p) place(p, sq); }); }
   function setOrientation(o, board) {
@@ -604,11 +653,13 @@ export function create(container) {
     plane.constant = -(y || 0);
     return ray.ray.intersectPlane(plane, hit) ? hit.clone() : null;
   }
+  let lastHitY = 0;
   function squareFromEvent(ev) {
     // prefer a piece under the pointer (tall pieces cover the square behind them)
     const r = el.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1), camera);
     const hits = ray.intersectObjects(piecesG.children, true);
+    lastHitY = hits.length ? hits[0].point.y : 0;
     if (hits.length) {
       let o = hits[0].object; while (o && o.parent !== piecesG) o = o.parent;
       for (const [sq, obj] of pieceAt) if (obj === o) return sq;
@@ -680,6 +731,19 @@ export function create(container) {
     if (dist < 1e-3) return;
     const u = obj.userData;
     u.busy = true;
+    if (type === 'leap') { // castling rook: crouch, vault over the king in an arc, land hard
+      await tween(200, (t) => { u.body.position.y = -0.08 * t; });
+      await tween(620, (t) => {
+        obj.position.lerpVectors(start, toPos, t);
+        obj.position.y = Math.sin(t * Math.PI) * 1.55;
+        u.body.position.y = -0.08 * (1 - t);
+        u.body.rotation.x = Math.sin(t * Math.PI * 2) * 0.15;
+      }, ease.inOut);
+      obj.position.y = 0; u.body.rotation.x = 0;
+      await tween(140, (t) => { u.body.position.y = -Math.sin(t * Math.PI) * 0.08; });
+      audio('thud'); shake(0.08); puff(toPos, 6, 0.5);
+      return;
+    }
     if (type === 'N') { // rear up, then leap
       await tween(240, (t) => { u.body.rotation.x = -0.5 * Math.sin(t * Math.PI / 2); });
       await tween(560, (t) => {
@@ -719,6 +783,9 @@ export function create(container) {
     const hitAt = { P: 0.62, R: 0.6, N: 0.6, B: 0.62, Q: 0.6, K: 0.62 }[type];
     let impact = false;
     const strike = (t) => { if (!impact && t >= hitAt) { impact = true; hitReact(victim, att); } };
+    // anticipation: lean back and gather before the blow
+    if (!reducedMotion()) await tween(180, (t) => { b.rotation.x = -0.18 * ease.out(t); b.position.y = 0.03 * t; });
+    b.position.y = 0;
     switch (type) {
       case 'P': // club overhead, then a shield shove
         await tween(560, (t) => {
@@ -777,17 +844,63 @@ export function create(container) {
 
   function hitReact(victim, att) {
     if (!victim) return;
-    audio('crack'); shake(0.12); flare(1);
+    audio('crack'); shake(0.16); flare(1);
+    if (!reducedMotion()) hitStopUntil = performance.now() + 90; // a split-second freeze sells the weight of the blow
     const dir = victim.position.clone().sub(att.position).setY(0).normalize();
     victim.userData.hitDir = dir;
-    const vb = victim.userData.body;
-    tween(140, (t) => { vb.rotation.x = -0.35 * t; victim.position.addScaledVector(dir, 0.01); });
+    const vb = victim.userData.body, p0 = victim.position.clone();
+    const side = new THREE.Vector3(dir.z, 0, -dir.x);
+    impactFlash(victim.position.clone().setY((victim.userData.height || 1) * 0.6), victim.userData.side);
+    tween(200, (t) => {
+      const k = ease.out(t);
+      vb.rotation.x = -0.55 * k; vb.rotation.z = 0.18 * k;
+      victim.position.copy(p0).addScaledVector(dir, 0.18 * k).addScaledVector(side, Math.sin(t * Math.PI * 3) * 0.02);
+    }, ease.linear);
   }
+
+  const FLASH_TEX = dustTexture();
+  function impactFlash(pos, side) {
+    if (reducedMotion()) return;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: FLASH_TEX, color: side === 'w' ? 0xFFE3A8 : 0xFFB070, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 1 }));
+    sp.position.copy(pos); sp.scale.setScalar(0.2); fxG.add(sp);
+    tween(260, (t) => { sp.scale.setScalar(0.2 + 1.3 * ease.out(t)); sp.material.opacity = 1 - t; }, ease.linear).then(() => { fxG.remove(sp); sp.material.dispose(); });
+  }
+
+  /* Pieces that are newly attacked turn their heads toward the threat, then settle. */
+  function noticeThreats(attackerSq, targets) {
+    if (reducedMotion() || !targets || !targets.length) return;
+    const a = pieceAt.get(attackerSq); if (!a) return;
+    const myGen = gen;
+    for (const sq of targets.slice(0, 4)) {
+      const o = pieceAt.get(sq); if (!o || o.userData.busy) continue;
+      const h = o.userData.head || o.userData.body;
+      const dx = a.position.x - o.position.x, dz = a.position.z - o.position.z;
+      let want = Math.atan2(dx, dz) - o.rotation.y;
+      want = Math.atan2(Math.sin(want), Math.cos(want));
+      want = Math.max(-1.1, Math.min(1.1, want));
+      const r0 = h.rotation.y;
+      tween(260, (t) => { if (gen === myGen) h.rotation.y = lerp(r0, want, t); })
+        .then(() => sleep(1100 * speed))
+        .then(() => gen === myGen && tween(380, (t) => { if (gen === myGen) h.rotation.y = lerp(want, 0, t); }));
+    }
+  }
+
+  /* Cinematic camera: swing low to frame a big moment, then hand back to the normal view. */
+  function shotOn(target) {
+    if (!cinematic || reducedMotion() || !target) return false;
+    const look = target.clone().setY(0.5);
+    const off = camState.pos.clone().sub(look).setY(0).normalize().multiplyScalar(3.6);
+    camOverride = { pos: look.clone().add(off).setY(2.3), look };
+    return true;
+  }
+  function shotOff() { camOverride = null; }
+  function setCinematic(b) { cinematic = !!b; if (!cinematic) camOverride = null; }
 
   /* ---------- the full move ---------- */
   async function animateMove(m, opts) {
     opts = opts || {};
     const obj = pieceAt.get(m.from); if (!obj) return;
+    const myGen = gen, stale = () => gen !== myGen; // a new game or position wipes the board mid-animation
     relax();
     obj.userData.busy = true;
     const type = obj.userData.type;
@@ -795,44 +908,64 @@ export function create(container) {
     const victim = m.captured ? pieceAt.get(capSq) : null;
     const dest = sqPos(m.to);
 
-    if (opts.hesitate && !reducedMotion()) await hesitate(obj);
+    if (opts.hesitate && !reducedMotion()) { await hesitate(obj); if (stale()) return; }
     await faceTo(obj, dest, 200);                                  // 1 anticipation
+    if (stale()) return;
 
-    if (m.flags === 'k' || m.flags === 'q') {                      // castling: both walk together
+    if (m.flags === 'k' || m.flags === 'q') {                      // castling: the king steps aside, then the rook vaults over him
       const rf = m.flags === 'k' ? m.to + 1 : m.to - 2, rt = m.flags === 'k' ? m.to - 1 : m.to + 1;
       const rook = pieceAt.get(rf);
-      await Promise.all([travel(obj, m.from, dest, 'K'), rook ? (async () => { await faceTo(rook, sqPos(rt), 200); await travel(rook, rf, sqPos(rt), 'R'); await faceRest(rook); })() : null]);
-      if (rook) { pieceAt.delete(rf); pieceAt.set(rt, rook); rook.userData.busy = false; }
+      await travel(obj, m.from, dest, 'K'); if (stale()) return;
+      if (rook) {
+        rook.userData.busy = true;
+        await faceTo(rook, sqPos(rt), 180); if (stale()) return;
+        await travel(rook, rf, sqPos(rt), reducedMotion() ? 'R' : 'leap'); if (stale()) return;
+        rook.position.copy(sqPos(rt));
+        pieceAt.delete(rf); pieceAt.set(rt, rook);
+        faceRest(rook).then(() => { rook.userData.busy = false; });
+      }
     } else if (victim && !reducedMotion()) {
       victim.userData.busy = true;
+      const big = victim.userData.type === 'Q' || victim.userData.type === 'R';
+      const shot = big && shotOn(sqPos(capSq));
       await faceTo(victim, obj.position, 260);                     // the victim turns to face its attacker
+      if (stale()) { if (shot) shotOff(); return; }
       const vp = sqPos(capSq), from = obj.position.clone();
       const toward = vp.clone().sub(from).setY(0);
-      const len = toward.length();
-      const stand = type === 'N' ? vp.clone().sub(toward.clone().normalize().multiplyScalar(0.55)) : from.clone().add(toward.clone().normalize().multiplyScalar(Math.max(0, len - 0.62)));
+      const len = toward.length(), dirN = toward.clone().normalize();
+      // stand far enough back that weapons and bodies don't pass through each other
+      const stand = type === 'N' ? vp.clone().sub(dirN.clone().multiplyScalar(0.8)) : from.clone().add(dirN.clone().multiplyScalar(Math.max(0, len - 0.8)));
       await travel(obj, m.from, stand, type);                      // 2 movement
+      if (stale()) { if (shot) shotOff(); return; }
       await faceTo(obj, vp, 120);
       await attack(obj, victim);                                   // 3 contact
-      shatter(victim, victim.userData.hitDir || toward.clone().normalize()); // 4 defeat
+      if (stale()) { if (shot) shotOff(); return; }
+      shatter(victim, victim.userData.hitDir || dirN);              // 4 defeat
       piecesG.remove(victim); pieceAt.delete(capSq);                // 5 removal
-      await sleep(260 * speed);
+      await sleep(380 * speed);                                     // let the rubble land before moving on
+      if (shot) shotOff();
+      if (stale()) return;
       await travel(obj, m.from, dest, type === 'N' ? 'P' : type);
+      if (stale()) return;
       if (opts.celebrate !== false) celebrate(obj);
     } else {
       if (victim) { victim.visible = false; piecesG.remove(victim); pieceAt.delete(capSq); }
       await travel(obj, m.from, dest, type);
+      if (stale()) return;
     }
     obj.position.copy(dest);
     pieceAt.delete(m.from); pieceAt.set(m.to, obj);
 
     if (m.promotion) {                                             // the pawn sinks; the new piece rises
       await tween(380, (t) => { obj.position.y = -0.8 * ease.in(t); });
+      if (stale()) return;
       piecesG.remove(obj); pieceAt.delete(m.to);
       const np = place(m.promotion, m.to);
       np.position.y = -0.9; puff(dest, 12, 0.8); audio('grind', 0.6);
       await tween(560, (t) => { np.position.y = -0.9 + 0.9 * ease.back(t); });
       np.position.y = 0;
       celebrate(np);
+      return;
     }
     await faceRest(obj, 260);                                     // 6 recovery
     obj.userData.busy = false;
@@ -859,6 +992,7 @@ export function create(container) {
     const k = pieceAt.get(kingSq); if (!k) return;
     const u = k.userData, w = u.weapon;
     u.busy = true; audio('rumble'); flare(1.6);
+    const shot = shotOn(k.position.clone());
     // the victors raise their weapons
     for (const o of pieceAt.values()) if (o.userData.side !== u.side) { const ow = o.userData.weapon, r0 = ow.rotation.clone(); tween(700, (t) => { ow.rotation.x = r0.x - Math.sin(t * Math.PI) * 1.4; o.userData.body.position.y = Math.sin(t * Math.PI) * 0.1; }); }
     // the king kneels and lays down his sword
@@ -867,7 +1001,7 @@ export function create(container) {
       w.rotation.x = u.baseWeaponRot.x + 1.25 * t; w.position.z = 0.26 + 0.25 * t; w.position.y = 0.58 - 0.18 * t;
     }, ease.inOut);
     shake(0.05); puff(k.position, 6, 0.5);
-    const runes = u.side === 'w' ? MAT.w.rune : MAT.b.rune; void runes;
+    if (shot) sleep(1600).then(shotOff);
   }
   async function bow(squares) {
     await Promise.all(squares.map((sq) => { const o = pieceAt.get(sq); if (!o) return null; const b = o.userData.body; return tween(900, (t) => { b.rotation.x = 0.35 * Math.sin(t * Math.PI); }); }));
@@ -914,7 +1048,7 @@ export function create(container) {
   return {
     el, is3D: true, setPosition, setOrientation, setView, mark, clearMarks, squareFromEvent, startDrag, moveDrag, endDrag, dragging,
     lift, relax, animateMove, topple, surrender, bow, pulseCheck, checkGuard, setThinking, showArrow,
-    flare, intro, setTurn, setAlert, thunder, groundSquareFromEvent, setSpeed(f) { speed = f; }, get orientation() { return orient; }, get view() { return view; },
+    flare, intro, setTurn, setAlert, thunder, groundSquareFromEvent, noticeThreats, setCinematic, lastHitHeight: () => lastHitY, setSpeed(f) { speed = f; }, get orientation() { return orient; }, get view() { return view; },
   };
 }
 

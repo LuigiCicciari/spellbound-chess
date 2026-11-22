@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Spellbound Chess</title>
-  <meta name="description" content="Play chess against living stone pieces. Earn an Elo rating and climb the ladder.">
+  <meta name="description" content="Play chess against living stone pieces. Earn an Elo rating and climb the leaderboard.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=0.4.1">
+  <link rel="stylesheet" href="style.css?v=0.5.0">
 </head>
 <body>
   <div class="app" id="app">
@@ -27,6 +27,8 @@
           <div id="board3d" class="board board3d" hidden></div>
           <svg id="board" class="board" role="img" aria-label="Chess board"></svg>
           <div class="piece-tip" id="pieceTip" hidden></div>
+          <div class="clock-badge them" id="clockThem" hidden>Stones 5:00</div>
+          <div class="clock-badge me" id="clockMe" hidden>You 5:00</div>
           <button class="hint-btn" id="hintBtn" title="What do real players play here?" hidden>✦ Hint</button>
           <div class="hint-panel" id="hintPanel" hidden></div>
           <div class="promo" id="promo" hidden>
@@ -37,7 +39,6 @@
         <div class="tray" id="trayBottom" aria-label="Pieces taken"></div>
         <div class="statusline">
           <span id="status" aria-live="polite">Your move</span>
-          <span class="clocks" id="clocks" hidden><span class="clock" id="clockThem">Stones 5:00</span><span class="clock" id="clockMe">You 5:00</span></span>
           <form id="typeForm" class="type-form" autocomplete="off">
             <label for="typeMove">Type a move</label>
             <input id="typeMove" placeholder="Nf3 or e2e4" maxlength="8" spellcheck="false">
@@ -57,7 +58,7 @@
             <span class="delta neutral" id="delta">■ ±0</span>
             <span class="record" id="record">W 0 · D 0 · L 0</span>
           </div>
-          <div class="sub" id="ratingSub">Play and save a game to get your rating (everyone starts at 1200)</div>
+          <div class="sub" id="ratingSub">Finish a game to get your rating</div>
           <svg class="spark" id="spark" viewBox="0 0 440 50" preserveAspectRatio="none" aria-hidden="true"></svg>
         </section>
 
@@ -95,6 +96,7 @@
               <select id="speedSel">
                 <option value="normal">Normal</option>
                 <option value="fast">Fast</option>
+                <option value="cinematic">Cinematic</option>
               </select>
             </label>
           </div>
@@ -115,9 +117,9 @@
           <ol class="movelist" id="moveList"></ol>
         </section>
 
-        <section class="card ladder" aria-label="Ladder">
+        <section class="card ladder" aria-label="Leaderboard">
           <div class="card-head">
-            <span>LADDER</span>
+            <span>LEADERBOARD</span>
             <div class="tabs" role="tablist">
               <button role="tab" class="tab active" data-tab="all">ALL TIME</button>
               <button role="tab" class="tab" data-tab="today">TODAY</button>
@@ -140,7 +142,7 @@
       <div class="result-sub" id="resultSub"></div>
       <div class="result-delta" id="resultDelta"></div>
       <div class="dialog-buttons">
-        <button class="btn primary" id="saveBtn">Save to ladder</button>
+        <button class="btn primary" id="saveBtn">Save to leaderboard</button>
         <button class="btn" id="againBtn">Play again</button>
         <button class="btn" id="replayBtn">Replay moves</button>
       </div>
@@ -150,7 +152,7 @@
 
   <div class="overlay" id="nameOverlay" hidden>
     <form class="dialog" id="nameForm">
-      <div class="result-title">Your ladder name</div>
+      <div class="result-title">Your leaderboard name</div>
       <p class="small">3–16 letters, numbers or _. This is what other players see.</p>
       <input id="nameInput" maxlength="16" autocomplete="off" spellcheck="false">
       <fieldset class="start-choice" id="startChoice">
@@ -160,6 +162,13 @@
         <label><input type="radio" name="start" value="1200"> I play a lot <b>1200</b></label>
         <p class="small">Don't worry about picking wrong: your rating moves fast for your first 10 games.</p>
       </fieldset>
+      <details class="recovery">
+        <summary>Recovery code (use your rating on another device)</summary>
+        <p class="small">Keep this private: anyone with it can play as you.</p>
+        <div class="code-row"><input id="recoveryCode" readonly aria-label="Your recovery code"><button type="button" class="btn" id="copyCode">Copy</button></div>
+        <div class="code-row"><input id="recoveryInput" placeholder="Paste a code from another device" aria-label="Paste a recovery code" autocomplete="off" spellcheck="false"><button type="button" class="btn" id="useCode">Use</button></div>
+        <div class="small" id="recoveryNote"></div>
+      </details>
       <div class="small error" id="nameError"></div>
       <div class="dialog-buttons">
         <button type="submit" class="btn primary">Save name</button>
@@ -186,8 +195,10 @@
         <li>Click one of your pieces, then click a glowing square. You can also drag, or type moves like <b>Nf3</b>.</li>
         <li>Just want to see the battles? Press <b>▶ Watch</b>.</li>
         <li>Pick a computer level. Each level is 400 rating points stronger than the last; levels 4–7 are powered by Stockfish. Beating stronger stones earns more rating.</li>
-        <li>When a game ends, <b>Save to ladder</b>. The first time, pick how well you play: you start even with the matching level (400, 800 or 1200). Ratings here come from games against the computer, so they're close to, but not the same as, chess.com or lichess ratings.</li>
-        <li>Turn on the <b>Clock</b> for timed games; running out of time loses.</li>
+        <li>The first time you finish a game, pick a name and how well you play; after that, rated games save to the <b>Leaderboard</b> automatically. You start even with the matching level (400, 800 or 1200). Ratings here come from games against the computer, so they're close to, but not the same as, chess.com or lichess ratings.</li>
+        <li>Turn on the <b>Clock</b> for timed games; running out of time loses (unless the other side can't checkmate, then it's a draw).</li>
+        <li><b>Animations → Cinematic</b> swoops the camera in for big captures.</li>
+        <li>Playing on another device? Open ✎ and copy your <b>recovery code</b>, then paste it there.</li>
         <li><b>✦ Hint</b> (when available) shows what real players played from this position.</li>
       </ul>
       <div class="dialog-buttons"><button class="btn primary" id="helpClose">Let's play</button></div>
@@ -196,20 +207,20 @@
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="config.js?v=0.4.1"></script>
-  <script src="rules.js?v=0.4.1"></script>
-  <script src="engine.js?v=0.4.1"></script>
-  <script src="audio.js?v=0.4.1"></script>
-  <script src="render.js?v=0.4.1"></script>
-  <script src="ladder.js?v=0.4.1"></script>
-  <script src="sf.js?v=0.4.1"></script>
+  <script src="config.js?v=0.5.0"></script>
+  <script src="rules.js?v=0.5.0"></script>
+  <script src="engine.js?v=0.5.0"></script>
+  <script src="audio.js?v=0.5.0"></script>
+  <script src="render.js?v=0.5.0"></script>
+  <script src="ladder.js?v=0.5.0"></script>
+  <script src="sf.js?v=0.5.0"></script>
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
   <script type="module">
     // Load the 3D board if the browser can; otherwise the flat board is used.
     try {
-      await Promise.race([import('./render3d.js?v=0.4.1'), new Promise((_, no) => setTimeout(() => no(new Error('3D load timed out')), 8000))]);
+      await Promise.race([import('./render3d.js?v=0.5.0'), new Promise((_, no) => setTimeout(() => no(new Error('3D load timed out')), 8000))]);
     } catch (e) { console.warn('Spellbound Chess: 3D board unavailable, using the flat board.', e); }
-    const s = document.createElement('script'); s.src = 'main.js?v=0.4.1'; document.body.appendChild(s);
+    const s = document.createElement('script'); s.src = 'main.js?v=0.5.0'; document.body.appendChild(s);
   </script>
 </body>
 </html>
