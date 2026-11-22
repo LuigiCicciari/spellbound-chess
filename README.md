@@ -24,11 +24,11 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 
 Scores are kept in each player's browser until you connect a free [Supabase](https://supabase.com) project:
 
-1. Create a project, open **SQL Editor**, paste `supabase.sql` and run it, then do the same with `supabase-update-v0.5.sql`.
+1. Create a project, open **SQL Editor**, paste `supabase.sql` and run it, then do the same with `supabase-update-v0.5.sql` and `supabase-update-v0.6.1.sql`.
 2. In **Project Settings → API Keys**, copy the **Publishable key** (starts with `sb_publishable_`) into `config.js`, and copy the **Project URL** from **Project Settings → Data API** (or the project's Connect screen).
 3. Commit. The leaderboard chip changes from ○ LOCAL to ● LIVE.
 
-The publishable key is safe to publish. Visitors can read the leaderboard but can't write to the tables directly: games are saved only through the `submit_game` function, which checks the player's private key (stored as a hash, never readable), sanity-checks the game, rate-limits saves, and calculates the Elo change on the server. Never put a secret key (`sb_secret_...`) or `service_role` key in this repo. To remove a bad name, delete its rows in Supabase's Table Editor.
+The publishable key is safe to publish. Visitors can read the leaderboard but can't write to the tables directly: games are saved only through the `submit_game` function, which checks the player's private key (stored as a hash, never readable), sanity-checks the game, rate-limits saves, and calculates the Elo change on the server. Never put a secret key (`sb_secret_...`) or `service_role` key in this repo. To take someone off the leaderboard, open **Table Editor → players** and tick `hidden` on their row.
 
 Each browser also replays its games' moves and refuses to submit any that are illegal or whose result doesn't match the final position.
 
@@ -41,7 +41,7 @@ Each browser also replays its games' moves and refuses to submit any that are il
 | `engine.js`, `engine.worker.js` | The game's own computer opponent (levels 1–3), run off the main thread |
 | `sf.js` | Runs Stockfish for levels 4–7 |
 | `engine/` | Stockfish.js 17.1 lite single-threaded (`stockfish-17.1-lite-single-03e3232.js` + `.wasm`), GPLv3, from [nmrugg/stockfish.js](https://github.com/nmrugg/stockfish.js) |
-| `supabase-update-v0.4.sql`, `supabase-update-v0.5.sql` | One-time database updates (v0.5 adds the players table and the secure save function) |
+| `supabase-update-v0.4.sql`, `-v0.5.sql`, `-v0.6.1.sql` | One-time database updates (v0.5 adds the players table and the secure save function; v0.6.1 checks that results match how the game ended, filters names on the server, and adds a `hidden` switch) |
 | `render3d.js` | 3D board, original stone warriors and battle animation ([three.js](https://threejs.org), MIT, loaded from jsDelivr) |
 | `render.js` | Flat SVG board, used when 3D isn't available |
 | `audio.js` | Sound effects made with WebAudio (no audio files) |

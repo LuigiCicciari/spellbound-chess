@@ -26,7 +26,12 @@
     if (['stalemate', 'threefold', 'fifty_move', 'insufficient'].includes(t)) return !!st && st.reason === t && g.result === 'D';
     if (t === 'resign') return !st && g.result === 'L'; // only the player can resign
     if (t === 'draw_agreed') return !st && g.result === 'D';
-    if (t === 'timeout') return !st && g.result !== 'D'; // a flag can't be checked from the moves, like a resignation
+    if (t === 'timeout') { // a flag can't be checked from the moves, like a resignation; only the player's clock can run out
+      if (!g.clock || st) return false;
+      if (g.result === 'L') return true;
+      // a draw on time: the side whose clock ran (the side to move) flagged, and the other side can't mate
+      return g.result === 'D' && game.turn === g.player_color && typeof game.canMate === 'function' && !game.canMate(g.player_color === 'w' ? 'b' : 'w');
+    }
     return false;
   }
 
@@ -101,7 +106,10 @@
     if (live()) {
       try {
         const cols = 'player_id,handle,rating,games,wins,draws,losses,best_level,start_rating';
-        const top = await rest(`players?select=${cols}&games=gte.${PROVISIONAL}&order=rating.desc,games.desc&limit=10`, { count: true, headers: { Prefer: 'count=exact' } });
+        // hidden = moderated players (v0.6.1 database); fall back if that column isn't there yet
+        let vis = '&hidden=is.false';
+        try { await rest('players?select=hidden&limit=1'); } catch (e) { vis = ''; }
+        const top = await rest(`players?select=${cols}&games=gte.${PROVISIONAL}${vis}&order=rating.desc,games.desc&limit=10`, { count: true, headers: { Prefer: 'count=exact' } });
         const meRows = await rest(`players?select=${cols}&player_id=eq.${encodeURIComponent(playerId)}`);
         const today = await rest('today_board?select=player_id,handle,gain,games&order=gain.desc&limit=10');
         const hist = await rest(`games?select=created_at,level,player_color,result,rating_before,rating_after&player_id=eq.${encodeURIComponent(playerId)}&order=created_at.asc&limit=500`);
@@ -110,7 +118,7 @@
         if (m) {
           me = { rating: m.rating, games: m.games, w: m.wins, d: m.draws, l: m.losses, best: m.best_level, start: m.start_rating, rank: null };
           if (m.games >= PROVISIONAL) {
-            const above = await rest(`players?select=player_id&games=gte.${PROVISIONAL}&rating=gt.${m.rating}&limit=1`, { count: true, headers: { Prefer: 'count=exact' } });
+            const above = await rest(`players?select=player_id&games=gte.${PROVISIONAL}${vis}&rating=gt.${m.rating}&limit=1`, { count: true, headers: { Prefer: 'count=exact' } });
             me.rank = countFrom(above.range) + 1;
           }
         }

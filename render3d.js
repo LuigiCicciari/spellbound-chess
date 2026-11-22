@@ -515,10 +515,10 @@ export function create(container) {
     const settle = Math.pow(0.02, dt);
     for (const obj of pieceAt.values()) {
       const u = obj.userData, br = u.bob.rotation;
-      if (!u.idling) { br.x *= settle; br.y *= settle; br.z *= settle; u.idleY *= settle; } // ease back after an interrupted habit
+      if (!u.idling || u.busy) { br.x *= settle; br.y *= settle; br.z *= settle; u.idleY *= settle; } // ease back after an interrupted habit
       u.bob.position.y = Math.sin(tsec * 1.6 + u.phase) * 0.006 + u.idleY;
     }
-    if (now > nextIdle) { nextIdle = now + 1800 + Math.random() * 2600; idleHabit(); }
+    if (now > nextIdle) { nextIdle = now + 3500 + Math.random() * 3500; idleHabit(); }
     const pulse = 1.2 + Math.sin(tsec * 6) * 1.1;
     MAT.w.rune.emissiveIntensity = thinking.w ? pulse : 2.2;
     MAT.b.rune.emissiveIntensity = thinking.b ? pulse : 2.2;
@@ -554,7 +554,7 @@ export function create(container) {
       if (Math.abs(s.m.position.x) > 4.6 || Math.abs(s.m.position.z) > 4.6) { if (s.m.position.y <= floor + 0.01) s.v.y = -1; }
       if (s.glow) { s.m.material.opacity = Math.max(0, 1 - s.life / 0.9); }
       if (s.life > 1.6) s.m.position.y -= dt * 0.25; // sink away
-      if (s.life > 2.4 || (s.glow && s.life > 0.9)) { fxG.remove(s.m); s.m.geometry.dispose(); shards.splice(i, 1); }
+      if (s.life > 2.4 || (s.glow && s.life > 0.9)) { fxG.remove(s.m); s.m.geometry.dispose(); if (s.glow) s.m.material.dispose(); shards.splice(i, 1); }
     }
     for (let i = dusts.length - 1; i >= 0; i--) {
       const d = dusts[i]; d.life += dt;
@@ -593,6 +593,8 @@ export function create(container) {
   function clearPieces() {
     gen++;
     for (const o of [...piecesG.children]) piecesG.remove(o); pieceAt.clear();
+    for (const s of shards) { s.m.geometry.dispose(); if (s.glow) s.m.material.dispose(); }
+    for (const d of dusts) d.sp.material.dispose();
     for (const o of [...fxG.children]) fxG.remove(o); shards.length = 0; dusts.length = 0; // sweep away old rubble
   }
   function place(p, sq) {
@@ -783,13 +785,19 @@ export function create(container) {
 
   /* ---------- attacks (one per piece type) ---------- */
   async function attack(att, victim) {
-    const u = att.userData, w = u.weapon, b = u.body, r0 = w.rotation.clone();
+    const u = att.userData, w = u.weapon, b = u.body, r0 = u.baseWeaponRot;
     const type = u.type;
     const hitAt = { P: 0.62, R: 0.6, N: 0.6, B: 0.62, Q: 0.6, K: 0.62 }[type];
     let impact = false;
     const strike = (t) => { if (!impact && t >= hitAt) { impact = true; hitReact(victim, att); } };
     // anticipation: lean back and gather before the blow
-    if (!reducedMotion()) await tween(180, (t) => { b.rotation.x = -0.18 * ease.out(t); b.position.y = 0.03 * t; });
+    // anticipation: the attacker leans back and gathers; the defender braces for the blow
+    const vb = victim && victim.userData.body;
+    if (!reducedMotion()) await tween(180, (t) => {
+      const k = ease.out(t);
+      b.rotation.x = -0.18 * k; b.position.y = 0.03 * t;
+      if (vb) { vb.rotation.x = 0.14 * k; vb.position.y = -0.035 * k; }
+    });
     b.position.y = 0;
     switch (type) {
       case 'P': // club overhead, then a shield shove
@@ -848,36 +856,44 @@ export function create(container) {
     w.rotation.copy(r0);
   }
 
+  // how hard a capture lands: bigger pieces fall harder
+  const WEIGHT = { P: 0.75, N: 1, B: 1, R: 1.25, Q: 1.5, K: 1.5 };
   function hitReact(victim, att) {
     if (!victim) return;
-    audio('crack'); shake(0.16); flare(1);
-    if (!reducedMotion()) hitStopUntil = performance.now() + 90; // a split-second freeze sells the weight of the blow
+    const wgt = WEIGHT[victim.userData.type] || 1;
+    audio('crack'); shake(0.11 * wgt); flare(wgt);
+    if (!reducedMotion()) hitStopUntil = performance.now() + 60 + 40 * wgt; // a split-second freeze sells the weight of the blow
     const dir = victim.position.clone().sub(att.position).setY(0).normalize();
     victim.userData.hitDir = dir;
-    const vb = victim.userData.body, p0 = victim.position.clone();
+    const vb = victim.userData.body, p0 = victim.position.clone(), vx0 = vb.rotation.x, vy0 = vb.position.y;
     const side = new THREE.Vector3(dir.z, 0, -dir.x);
-    impactFlash(victim.position.clone().setY((victim.userData.height || 1) * 0.6), victim.userData.side);
-    tween(200, (t) => {
+    impactFlash(victim.position.clone().setY((victim.userData.height || 1) * 0.6), victim.userData.side, wgt);
+    // recoil: snapped back by the blow, a stagger to one side, then it starts to crack
+    tween(240, (t) => {
       const k = ease.out(t);
-      vb.rotation.x = -0.55 * k; vb.rotation.z = 0.18 * k;
-      victim.position.copy(p0).addScaledVector(dir, 0.18 * k).addScaledVector(side, Math.sin(t * Math.PI * 3) * 0.02);
+      vb.rotation.x = lerp(vx0, -0.5 * wgt, k); vb.rotation.z = 0.2 * wgt * Math.sin(t * Math.PI * 0.9);
+      vb.position.y = lerp(vy0, 0, k);
+      victim.position.copy(p0).addScaledVector(dir, 0.16 * wgt * k).addScaledVector(side, Math.sin(t * Math.PI * 3) * 0.025 * wgt);
     }, ease.linear);
   }
 
   const FLASH_TEX = dustTexture();
-  function impactFlash(pos, side) {
+  function impactFlash(pos, side, wgt) {
     if (reducedMotion()) return;
+    const big = 1.3 * (wgt || 1);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: FLASH_TEX, color: side === 'w' ? 0xFFE3A8 : 0xFFB070, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 1 }));
     sp.position.copy(pos); sp.scale.setScalar(0.2); fxG.add(sp);
-    tween(260, (t) => { sp.scale.setScalar(0.2 + 1.3 * ease.out(t)); sp.material.opacity = 1 - t; }, ease.linear).then(() => { fxG.remove(sp); sp.material.dispose(); });
+    tween(260, (t) => { sp.scale.setScalar(0.2 + big * ease.out(t)); sp.material.opacity = 1 - t; }, ease.linear).then(() => { fxG.remove(sp); sp.material.dispose(); });
   }
 
   /* ---------- habits and reactions (they move only the "bob" group, so they never fight a move or an attack) ---------- */
   function lean(o, ms, fn) {
     const u = o.userData, br = u.bob.rotation, myGen = gen;
+    let dropped = false;
     u.idling = true;
     return tween(ms, (t) => {
-      if (u.busy || gen !== myGen) return;  // a real move took over: the frame loop eases the pose back
+      if (dropped) return;
+      if (u.busy || gen !== myGen) { dropped = true; u.idling = false; return; } // a real move took over: the frame loop eases the pose back
       const p = fn(t); br.y = p.yaw || 0; br.x = p.pitch || 0; br.z = p.roll || 0; u.idleY = p.y || 0;
     }, ease.linear, true).then(() => { u.idling = false; });
   }
@@ -1034,7 +1050,12 @@ export function create(container) {
     // nearby allies turn toward their king
     for (const [sq, o] of pieceAt) {
       if (o === k || o.userData.side !== u.side) continue;
-      if (Math.abs((sq & 7) - (kingSq & 7)) <= 1 && Math.abs((sq >> 3) - (kingSq >> 3)) <= 1) faceTo(o, k.position, 260).then(() => sleep(700)).then(() => faceRest(o, 300));
+      if (o.userData.busy) continue;
+      if (Math.abs((sq & 7) - (kingSq & 7)) <= 1 && Math.abs((sq >> 3) - (kingSq >> 3)) <= 1) {
+        const myGen = gen;
+        // they glance at their king; anyone sent off to block the check keeps facing where it's going
+        faceTo(o, k.position, 260).then(() => sleep(700)).then(() => { if (gen === myGen && !o.userData.busy && o.parent) return faceRest(o, 300); });
+      }
     }
     await tween(320, (t) => { w.rotation.x = r0.x - 1.3 * t; u.body.rotation.x = -0.12 * t; });
     await sleep(600);
@@ -1083,7 +1104,7 @@ export function create(container) {
   function setThinking(side, on) { thinking[side] = !!on; }
 
   function showArrow(from, to) {
-    for (const o of [...hintG.children]) hintG.remove(o);
+    for (const o of [...hintG.children]) { hintG.remove(o); o.geometry.dispose(); o.material.dispose(); } // shaft and tip share one material; disposing twice is harmless
     if (from < 0) return;
     const a = sqPos(from), b = sqPos(to), dir = b.clone().sub(a), len = dir.length();
     const mat = basic(0x8EC5E8, 0.9);

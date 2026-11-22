@@ -49,7 +49,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.6.0');
+    worker = new Worker('engine.worker.js?v=0.6.1');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -140,7 +140,7 @@
   function updateButtons() {
     const live = !watching && (phase === 'player' || phase === 'engine');
     $('drawBtn').disabled = !live || game.sanHistory.length < 2;
-    $('resignBtn').disabled = !live || game.sanHistory.length < 1;
+    $('resignBtn').disabled = watching || !['player', 'engine', 'animating'].includes(phase) || game.sanHistory.length < 1;
   }
 
   /* ---------- game flow ---------- */
@@ -203,6 +203,7 @@
     if (token !== gameToken) return true;
     lastMove = { from: played.from, to: played.to };
     syncBoard(false);
+    if (!watching) notePending();
     const moverName = colorOf(played.piece) === playerColor ? 'You' : 'Stones';
     const st = game.status();
     if (st) { await endGame(st.result, st.reason); return true; }
@@ -222,6 +223,7 @@
   async function endGame(result, reason) {
     if (phase === 'over') return;                       // a game ends once (e.g. flag while a dialog was open)
     phase = 'over'; selected = null; updateButtons(); clockStop(null, false);
+    clearPending();
     if (promoResolve) promoResolve(null);
     if (confirmResolve) confirmResolve(false);
     R.setThinking('w', false); R.setThinking('b', false);
@@ -278,15 +280,36 @@
     $('saveBtn').focus();
   }
 
+  function recordFor(res, reason) {
+    return {
+      player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
+      result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.6.1',
+      start_rating: profile.start || null, clock: clock ? settings.clock : null,
+    };
+  }
+  /* A rated game in progress is kept as "resigned" in this browser, so closing the page or starting over
+     mid-game still counts as a loss. It's cleared the moment the game ends normally. */
+  const PENDING = 'spellbound.pending';
+  function notePending() {
+    if (unrated) { clearPending(); return; }
+    if (watching || !profile.handle || !profile.start || phase === 'over' || phase === 'replay' || game.sanHistory.length < 2) return;
+    store.set(PENDING, recordFor('L', 'resign'));
+  }
+  function clearPending() { try { localStorage.removeItem(PENDING); } catch (e) { /* ignore */ } }
+  async function flushPending() {
+    const rec = store.get(PENDING, null);
+    if (!rec || rec.player_id !== profile.player_id) { clearPending(); return; }
+    clearPending();
+    if (!window.SBLadder.verify(rec)) return;
+    const r = await window.SBLadder.save(rec, profile.secret);
+    if (!r.error) { toast('Your unfinished game was counted as a resignation.', 4000); refreshLadder(); }
+  }
+
   async function saveGame() {
     if (savedThisGame || !gameOver) return;
     if (!profile.handle || !profile.start) { const ok = await askName(); if (!ok) return; }
-    const rec = {
-      player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
-      result: gameOver.res, termination: gameOver.reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.5.0',
-      start_rating: profile.start || null, clock: clock ? settings.clock : null,
-    };
+    const rec = recordFor(gameOver.res, gameOver.reason);
     if (rec.ply_count < 2) return;
     if (!window.SBLadder.verify(rec)) { $('saveNote').textContent = 'This game could not be verified, so it was not saved.'; return; }
     savedThisGame = true;
@@ -438,7 +461,7 @@
   /* ---------- buttons ---------- */
   $('newBtn').onclick = async () => {
     if (watching) { newGame(); return; }
-    if ((phase === 'player' || phase === 'engine') && game.sanHistory.length > 1) {
+    if (['player', 'engine', 'animating', 'intro'].includes(phase) && game.sanHistory.length > 1) {
       const ok = await confirmBox('Abandon this game?', profile.handle ? 'It counts as a loss on the leaderboard.' : 'It counts as a resignation.');
       if (!ok) return;
       gameToken++;
@@ -448,7 +471,7 @@
     newGame();
   };
   $('resignBtn').onclick = async () => {
-    if (!(phase === 'player' || phase === 'engine')) return;
+    if (!['player', 'engine', 'animating'].includes(phase)) return;
     if (!(await confirmBox('Resign?', 'Your king will lay down his crown.'))) return;
     gameToken++;
     await endGame(playerColor === 'w' ? '0-1' : '1-0', 'resign');
@@ -724,6 +747,6 @@
   /* ---------- start ---------- */
   applySound();
   if (!settings.seenHelp) $('helpOverlay').hidden = false;
-  refreshLadder();
+  refreshLadder().then(flushPending);
   newGame();
 })();
