@@ -1,6 +1,6 @@
 /* Spellbound Chess — 3D board, original stone warriors, and the battle animation.
    Same interface as render.js (the 2D board), plus personality reactions. */
-import * as THREE from 'three';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'; // full address: works even where import maps aren't supported
 
 const FILES = 'abcdefgh';
 const reducedMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

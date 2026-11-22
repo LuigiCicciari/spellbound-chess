@@ -41,8 +41,11 @@
   const webglOK = () => { try { const c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); } catch (e) { return false; } };
   let R = null;
   if (window.SBRender3D && webglOK() && !/[?&]flat\b/.test(location.search)) {
-    try { $('board3d').hidden = false; svg.style.display = 'none'; R = window.SBRender3D.create($('board3d')); } catch (e) { R = null; }
+    try { $('board3d').hidden = false; svg.style.display = 'none'; R = window.SBRender3D.create($('board3d')); } catch (e) { R = null; window.SB3DError = 'the 3D board could not start (' + ((e && e.message) || e) + ')'; }
   }
+  const flatWhy = /[?&]flat\b/.test(location.search) ? null
+    : !window.SBRender3D ? (window.SB3DError || 'the 3D files did not load')
+    : !webglOK() ? 'this window has WebGL (3D graphics) turned off' : window.SB3DError || null;
   if (!R) { $('board3d').hidden = true; svg.style.display = ''; R = window.SBRender.create(svg); }
   const boardEl = R.el || svg;
   $('viewBtn').hidden = !R.is3D;
@@ -53,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.9.0');
+    worker = new Worker('engine.worker.js?v=0.9.1');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -343,7 +346,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.9.0',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.9.1',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -1099,6 +1102,7 @@
 
   /* ---------- start ---------- */
   applySound();
+  if (!R.is3D && flatWhy) setTimeout(() => toast(`Showing the flat board: ${flatWhy}.`, 7000), 1200); // says why, so it can be fixed
   if (!settings.seenHelp) $('helpOverlay').hidden = false;
   refreshLadder().then(flushPending);
   newGame();
