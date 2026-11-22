@@ -236,16 +236,30 @@ export function create(container) {
   let fireBoost = 0;
   const bowlStone = new THREE.MeshStandardMaterial({ color: 0x4a4640, roughness: 0.95, flatShading: true });
   const add = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
-  const flameLayers = [[0.62, 2.3, add(0xff3c0a, 0.45)], [0.5, 1.8, add(0xff6a1a, 0.55)], [0.34, 1.3, add(0xffa040, 0.7)], [0.18, 0.75, add(0xfff0c0, 0.95)]];
+  // flames are camera-facing sprites shaped like real flames, so they stay upright from any angle
+  const FLAME_TEX = (() => {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 256; const g = c.getContext('2d');
+    g.beginPath(); g.moveTo(64, 4);
+    g.bezierCurveTo(78, 60, 124, 110, 118, 170); g.bezierCurveTo(112, 230, 84, 252, 64, 252);
+    g.bezierCurveTo(44, 252, 16, 230, 10, 170); g.bezierCurveTo(4, 110, 50, 60, 64, 4); g.closePath();
+    const gr = g.createLinearGradient(0, 252, 0, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fill();
+    g.globalCompositeOperation = 'destination-in'; const rg = g.createRadialGradient(64, 190, 10, 64, 170, 120);
+    rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0.25)'); g.fillStyle = rg; g.fillRect(0, 0, 128, 256);
+    return new THREE.CanvasTexture(c);
+  })();
+  const flameSprite = (color, opacity) => new THREE.SpriteMaterial({ map: FLAME_TEX, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
+  const flameLayers = [[2.1, 3.6, 0xff3c0a, 0.55], [1.6, 2.9, 0xff6a1a, 0.7], [1.1, 2.0, 0xffa040, 0.85], [0.6, 1.15, 0xfff0c0, 0.95]];
   const FIRE_BASE = 0.8;
   const EMBER_TEX = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); const gr = g.createRadialGradient(16, 16, 0, 16, 16, 15); gr.addColorStop(0, 'rgba(255,230,170,1)'); gr.addColorStop(0.4, 'rgba(255,140,40,0.9)'); gr.addColorStop(1, 'rgba(255,80,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
-  for (const [x, z] of [[-5.7, -1.6], [5.7, -1.6], [-5.9, 2.4], [5.9, 2.4]]) {
+  for (const [x, z] of [[-5.7, -2.4], [5.7, -2.4], [-5.5, 0.4], [5.5, 0.4]]) {
     mesh(new THREE.CylinderGeometry(0.34, 0.5, 0.9, 8), bowlStone, x, 0.08, z, scene);
     const bowl = mesh(new THREE.CylinderGeometry(0.62, 0.34, 0.34, 8, 1, true), bowlStone, x, 0.68, z, scene); bowl.material.side = THREE.DoubleSide;
     mesh(new THREE.CylinderGeometry(0.56, 0.56, 0.04, 8), new THREE.MeshBasicMaterial({ color: 0x5a1e06 }), x, 0.78, z, scene);
-    for (const [r, h, mat] of flameLayers) {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(r, h, 9, 1, true), mat);
-      f.position.set(x, FIRE_BASE + h / 2, z); f.userData.h = h; scene.add(f); flames.push(f);
+    for (const [w, h, color, opacity] of flameLayers) {
+      const f = new THREE.Sprite(flameSprite(color, opacity));
+      f.position.set(x, FIRE_BASE + h / 2 - 0.1, z); f.userData.h = h; f.userData.w = w; f.userData.x = x; scene.add(f); flames.push(f);
     }
     const t = new THREE.PointLight(0xff9a40, 18, 13, 1.4); t.position.set(x, 1.8, z); scene.add(t); torches.push(t);
     bowls.push(new THREE.Vector3(x, FIRE_BASE + 0.1, z));
@@ -470,9 +484,8 @@ export function create(container) {
     flames.forEach((f, i) => {
       const k = 1 + Math.sin(tsec * 11 + i * 1.7) * 0.12 + Math.sin(tsec * 27 + i) * 0.07 + fireBoost * 0.7;
       const w = 1 / Math.sqrt(k) + fireBoost * 0.15;
-      f.scale.set(w, k, w); f.position.y = FIRE_BASE + (f.userData.h * k) / 2;
-      f.rotation.y = tsec * (i % 2 ? 1.3 : -0.9);
-      f.rotation.z = Math.sin(tsec * 3 + i) * 0.06;
+      f.scale.set(f.userData.w * w, f.userData.h * k, 1); f.position.y = FIRE_BASE - 0.1 + (f.userData.h * k) / 2;
+      f.position.x = f.userData.x + Math.sin(tsec * 5 + i * 1.3) * 0.04 * (1 + (i % 4));
     });
     if (!reducedMotion() && Math.random() < dt * 22) spawnEmber(bowls[Math.floor(Math.random() * bowls.length)]);
     if (!reducedMotion() && Math.random() < dt * 5) {
