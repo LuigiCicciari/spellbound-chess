@@ -95,6 +95,21 @@
     if (init && init.count) return { rows: await res.json(), range: res.headers.get('content-range') };
     return res.status === 204 ? null : res.json();
   }
+  const NOT_DEPLOYED = Symbol('not deployed');
+  async function callFunction(name, body) {
+    const c = cfg();
+    const key = c.supabaseAnonKey.trim();
+    const headers = { apikey: key, 'Content-Type': 'application/json' };
+    if (key.startsWith('eyJ')) headers.Authorization = `Bearer ${key}`;
+    const res = await fetch(`${c.supabaseUrl.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '')}/functions/v1/${name}`, { method: 'POST', headers, body });
+    if (res.status === 404) return NOT_DEPLOYED;
+    if (!res.ok) {
+      let msg = `Supabase ${res.status}`;
+      try { const j = await res.json(); if (j && (j.message || j.msg)) msg = j.message || j.msg; } catch (e) { /* ignore */ }
+      const err = new Error(msg); err.status = res.status; throw err;
+    }
+    return res.json();
+  }
   const countFrom = (range) => { const m = /\/(\d+)$/.exec(range || ''); return m ? Number(m[1]) : 0; };
 
   let mode = live() ? 'live' : 'local';
@@ -146,6 +161,35 @@
     };
   }
 
+  /* Per-level board: who has beaten this level most often (wins, then draws). */
+  async function levelBoard(level) {
+    const L = Number(level);
+    const tally = (rows, nameOf) => {
+      const m = new Map();
+      for (const g of rows) {
+        const t = m.get(g.player_id) || { player_id: g.player_id, handle: nameOf(g), wins: 0, draws: 0, games: 0 };
+        t.games++; if (g.result === 'W') t.wins++; else if (g.result === 'D') t.draws++;
+        m.set(g.player_id, t);
+      }
+      return [...m.values()].filter((t) => t.wins > 0).sort((a, b) => b.wins - a.wins || b.draws - a.draws || a.games - b.games).slice(0, 10);
+    };
+    if (live()) {
+      try {
+        const rows = await rest(`games?select=player_id,handle,result&level=eq.${L}&order=created_at.desc&limit=5000`);
+        let hidden = new Set();
+        try { hidden = new Set((await rest('players?select=player_id&hidden=is.true')).map((p) => p.player_id)); } catch (e) { /* older database */ }
+        const names = new Map();
+        const top = tally(rows.filter((g) => !hidden.has(g.player_id)), (g) => g.handle);
+        if (top.length) {
+          const ids = top.map((t) => t.player_id).join(',');
+          try { (await rest(`players?select=player_id,handle&player_id=in.(${ids})`)).forEach((p) => names.set(p.player_id, p.handle)); } catch (e) { /* keep game names */ }
+        }
+        return top.map((t, i) => ({ ...t, handle: names.get(t.player_id) || t.handle, rank: i + 1 }));
+      } catch (e) { /* fall through to local */ }
+    }
+    return tally(store.get(LS_KEY, []).filter((g) => Number(g.level) === L), (g) => g.handle).map((t, i) => ({ ...t, rank: i + 1 }));
+  }
+
   /* Save a finished game. LIVE: through the submit_game function, which checks the secret and rates the game on the server. */
   async function save(record, secret) {
     const local = store.get(LS_KEY, []);
@@ -153,12 +197,16 @@
     local.push(record); store.set(LS_KEY, local);
     if (!live()) { mode = 'local'; return { mode }; }
     try {
-      const r = await rest('rpc/submit_game', { method: 'POST', body: JSON.stringify({
+      const body = JSON.stringify({
         p_player_id: record.player_id, p_secret: secret, p_handle: record.handle, p_level: record.level,
         p_player_color: record.player_color, p_result: record.result, p_termination: record.termination,
         p_ply_count: record.ply_count, p_pgn: record.pgn, p_start_rating: record.start_rating,
         p_clock: record.clock, p_app_version: record.app_version,
-      }) });
+      });
+      // v1.0: games go through the submit-game Edge Function, which replays the moves before the database rates
+      // the game. Until that function is deployed (404), fall back to the database function directly.
+      let r = await callFunction('submit-game', body);
+      if (r === NOT_DEPLOYED) r = await rest('rpc/submit_game', { method: 'POST', body });
       mode = 'live';
       return { mode, before: r && r.rating_before, after: r && r.rating_after };
     } catch (e) {
@@ -174,7 +222,7 @@
     catch (e) { return false; }
   }
 
-  const api = { verify, compute, preview, board, save, rename, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
+  const api = { verify, compute, preview, board, levelBoard, save, rename, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SBLadder = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -17,6 +17,10 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 - Animated moves, captures, promotions, castling and checkmate, with synthesized stone sound effects
 - **Casual** and **Rated** modes. Casual is for practice: take back moves, ask Stockfish for a hint (shown as an arrow), and see which of your pieces are in danger (attacked and undefended, or attacked by a cheaper piece). Rated games count on the leaderboard. The mode is fixed once a game starts; newcomers start in Casual.
 - 📜 **Battle report** after every game: Stockfish analyses each move (in the background, cached), then shows a chart of White's winning chances, your accuracy and the stones' (Lichess's formula and its 10/20/30-point inaccuracy/mistake/blunder thresholds), captures, your three costliest moves with the better move (Review jumps straight to the position, with ▶ buttons to play your move or the better one), your best move (one that matched Stockfish's first choice at an important moment) replayed with the cinematic camera, Copy PGN and Open in Lichess. Undo in Casual also puts the clocks back.
+- Opening names in the move list (a hand-picked list of about 90 well-known openings) and in the battle report and PGN
+- LEVELS leaderboard tab: who has beaten each computer level most often; win streaks in the rating tile
+- Casual mode warns before a move that would stalemate the stones while you're ahead; a stalemate result explains what happened
+- Rated games are checked on the server: the `submit-game` Edge Function (in `supabase/functions/submit-game/index.ts`) replays every move with the game's own rules before the database rates the game
 - Clicking a tall piece picks that piece; clicking the same spot again picks a shorter piece hidden behind it
 - Elo rating: the first time you finish a Rated game you pick a name and New (400), Sometimes (800) or A lot (1200); after that Rated games save automatically. Ratings move fastest for your first 10 games. ALL TIME, TODAY and MINE leaderboard tabs
 - At levels 4–7 Stockfish decides whether to accept a draw offer (offers open after move 20)
@@ -28,7 +32,7 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 
 Scores are kept in each player's browser until you connect a free [Supabase](https://supabase.com) project:
 
-1. Create a project, open **SQL Editor**, paste `supabase.sql` and run it, then do the same with `supabase-update-v0.5.sql` and `supabase-update-v0.6.1.sql`.
+1. Create a project, open **SQL Editor**, paste `supabase.sql` and run it, then do the same with `supabase-update-v0.5.sql` and `supabase-update-v0.6.1.sql`. Deploy the Edge Function in `supabase/functions/submit-game/index.ts` (Edge Functions → Deploy a new function → Via Editor, name `submit-game`, turn off "Enforce JWT verification"), then run `supabase-update-v1.0.sql`.
 2. In **Project Settings → API Keys**, copy the **Publishable key** (starts with `sb_publishable_`) into `config.js`, and copy the **Project URL** from **Project Settings → Data API** (or the project's Connect screen).
 3. Commit. The leaderboard chip changes from ○ LOCAL to ● LIVE.
 

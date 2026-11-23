@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.9.2');
+    worker = new Worker('engine.worker.js?v=1.0.0');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -116,8 +116,10 @@
     if (R.setTurn) R.setTurn(game.turn, game.inCheck());
   }
 
+  const openingOf = (sans) => (window.SBOpenings ? window.SBOpenings.name(sans) : '');
   function renderMoves() {
     const ol = $('moveList'); ol.innerHTML = '';
+    const op = openingOf(game.sanHistory); $('openingName').textContent = op ? '· ' + op : ''; $('openingName').title = op;
     const h = game.sanHistory;
     for (let i = 0; i < h.length; i += 2) {
       const li = document.createElement('li');
@@ -324,6 +326,7 @@
     const { res, reason } = gameOver;
     $('resultTitle').textContent = res === 'W' ? 'Victory!' : res === 'D' ? 'Draw' : 'Defeat';
     const why = reason === 'timeout' && res === 'D' ? RESULT_DRAW_TIMEOUT : (REASONS[reason] || '');
+    $('resultTip').hidden = !(reason === 'stalemate' && material(playerColor) > material(playerColor === 'w' ? 'b' : 'w'));
     $('resultSub').textContent = `${res === 'W' ? 'You beat' : res === 'D' ? 'You drew with' : 'You lost to'} Level ${level} ${LEVELS[level].name} ${why} in ${Math.ceil(game.sanHistory.length / 2)} move${Math.ceil(game.sanHistory.length / 2) === 1 ? '' : 's'}.`;
     const me = myStats();
     const d = window.SBLadder.preview(me.rating, me.games, LEVELS[level].elo, res);
@@ -346,7 +349,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.9.2',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.0.0',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -434,8 +437,22 @@
     const token = gameToken;
     if (options[0].promotion) { promotion = await pickPromotion(); if (!promotion) { if (phase === 'player') clearSelection(); return true; } }
     if (token !== gameToken || phase !== 'player') return true;
+    if (mode === 'casual' && settings.danger && stalematesWhileAhead({ from, to, promotion })) {
+      const ok = await confirmBox('That move is stalemate', "The stones would have no legal move and aren't in check, so the game ends in a draw, even though you're ahead. Leave their king a square to move to and go for checkmate instead. Play it anyway?");
+      if (!ok || token !== gameToken || phase !== 'player') { if (phase === 'player') clearSelection(); return true; }
+    }
     await playMove({ from, to, promotion });
     return true;
+  }
+
+  /* Would this move stalemate the stones while you have more material? (Nicola's early games: seven wins turned into draws.) */
+  function material(color) { let n = 0; for (const p of game.board) if (p && colorOf(p) === color && typeOf(p) !== 'K') n += PVAL[typeOf(p)]; return n; }
+  function stalematesWhileAhead(spec) {
+    const me = playerColor, them = me === 'w' ? 'b' : 'w';
+    const ahead = material(me) > material(them);
+    const p = game.move(spec); if (!p) return false;
+    const st = game.status(); game.undo();
+    return ahead && !!st && st.reason === 'stalemate';
   }
 
   function pickPromotion() {
@@ -759,7 +776,8 @@
     const them = playerColor === 'w' ? 'b' : 'w';
     const counts = { blunder: 0, mistake: 0, inaccuracy: 0 }; mine.forEach((m) => { const k = kind(m.drop); if (k) counts[k]++; });
     const res = gameOver ? gameOver.res : '';
-    $('reportSub').textContent = `${res === 'W' ? 'Victory' : res === 'D' ? 'Draw' : 'Defeat'} against Level ${level} ${LEVELS[level].name} · ${Math.ceil(n / 2)} moves · ${mode === 'rated' ? 'Rated' : 'Casual'} game`;
+    const op = openingOf(final.sanHistory);
+    $('reportSub').textContent = `${res === 'W' ? 'Victory' : res === 'D' ? 'Draw' : 'Defeat'} against Level ${level} ${LEVELS[level].name} · ${Math.ceil(n / 2)} moves · ${mode === 'rated' ? 'Rated' : 'Casual'} game${op ? ' · ' + op : ''}`;
     const stat = (v, label) => `<div class="stat"><b>${v === null ? '…' : v}</b><span>${label}</span></div>`;
     $('reportStats').innerHTML = stat(avg(mine) === null ? null : avg(mine) + '%', 'Your accuracy') + stat(avg(theirs) === null ? null : avg(theirs) + '%', "The stones' accuracy")
       + stat(`${caps(playerColor)} · ${caps(them)}`, 'Captures (you · stones)') + stat(report.done ? `${counts.blunder} · ${counts.mistake} · ${counts.inaccuracy}` : null, 'Blunders · mistakes · inaccuracies');
@@ -863,7 +881,8 @@
     const final = finalGame(), me = 'You', bot = `Level ${level} ${LEVELS[level].name} (${LEVELS[level].elo})`;
     const result = gameOver ? gameOver.result : '*';
     return `[Event "Spellbound Chess"]\n[Site "https://luigicicciari.github.io/spellbound-chess/"]\n[Date "${new Date(gameStart).toISOString().slice(0, 10).replace(/-/g, '.')}"]\n`
-      + `[White "${playerColor === 'w' ? me : bot}"]\n[Black "${playerColor === 'b' ? me : bot}"]\n[Result "${result}"]\n\n${final.pgn()} ${result}\n`;
+      + `[White "${playerColor === 'w' ? me : bot}"]\n[Black "${playerColor === 'b' ? me : bot}"]\n[Result "${result}"]\n`
+      + (openingOf(final.sanHistory) ? `[Opening "${openingOf(final.sanHistory)}"]\n` : '') + `\n${final.pgn()} ${result}\n`;
   }
   $('reportBtn').onclick = openReport;
   $('reportClose').onclick = () => { $('reportOverlay').hidden = true; $('resultOverlay').hidden = false; };
@@ -926,6 +945,7 @@
 
   /* ---------- rating tile + ladder ---------- */
   async function refreshLadder() {
+    levelCache.clear();
     ladderData = await window.SBLadder.board(profile.player_id);
     if (ladderData.me && !profile.handle) { const top = ladderData.ranked.find((p) => p.player_id === profile.player_id); if (top) profile.handle = top.handle; }
     const live = ladderData.mode === 'live';
@@ -948,7 +968,9 @@
     if (!me.games) $('ratingSub').textContent = 'Finish a game to get your rating. You choose a starting level the first time.';
     else {
       const rank = me.rank ? `Rank #${me.rank} of ${ladderData.totalRanked}` : `Ranked after ${window.SBLadder.PROVISIONAL} games (${me.games} so far)`;
-      $('ratingSub').textContent = `${rank}${me.best ? ' · Best win: Level ' + me.best : ''}`;
+      // win streak: wins in a row at the end of your history
+      let streak = 0; for (let i = me.history.length - 1; i >= 0 && me.history[i].result === 'W'; i--) streak++;
+      $('ratingSub').textContent = `${rank}${me.best ? ' · Best win: Level ' + me.best : ''}${streak >= 2 ? ` · 🔥 ${streak} wins in a row` : ''}`;
     }
     renderSpark(me.history);
   }
@@ -970,9 +992,25 @@
 
   function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+  let levelPick = null; const levelCache = new Map();
+  async function renderLevels(body) {
+    if (levelPick === null) levelPick = level;
+    const opts = Object.keys(LEVELS).map((k) => `<option value="${k}"${Number(k) === Number(levelPick) ? ' selected' : ''}>${k} · ${LEVELS[k].name} (${LEVELS[k].elo})</option>`).join('');
+    body.innerHTML = `<label class="level-pick">Most wins against <select id="levelPick" aria-label="Level">${opts}</select></label><div id="levelTable"><div class="empty">Loading…</div></div>`;
+    $('levelPick').onchange = (e) => { levelPick = Number(e.target.value); renderLadder(); };
+    const want = levelPick, hit = levelCache.get(want);
+    const rows = hit && Date.now() - hit.at < 60000 ? hit.rows : await window.SBLadder.levelBoard(want);
+    levelCache.set(want, { at: Date.now(), rows });
+    if (ladderTab !== 'levels' || levelPick !== want || !$('levelTable')) return;
+    $('levelTable').innerHTML = rows.length
+      ? `<table><thead><tr><th class="num">#</th><th>Name</th><th class="num">Wins</th><th class="num">Draws</th><th class="num">Games</th></tr></thead><tbody>${rows.map((r) =>
+        `<tr${r.player_id === profile.player_id ? ' class="me"' : ''}><td class="num">${r.rank}</td><td>${esc(r.handle)}</td><td class="num">${Number(r.wins)}</td><td class="num">${Number(r.draws)}</td><td class="num">${Number(r.games)}</td></tr>`).join('')}</tbody></table>`
+      : `<div class="empty">Nobody has beaten ${esc(LEVELS[want].name)} yet. Be the first!</div>`;
+  }
   function renderLadder() {
     const body = $('ladderBody'); if (!ladderData) { body.innerHTML = ''; return; }
     const me = profile.player_id;
+    if (ladderTab === 'levels') { renderLevels($('ladderBody')); return; }
     if (ladderTab === 'mine') {
       if (!ladderData.history.length) { body.innerHTML = '<div class="empty">Your saved games will show here.</div>'; return; }
       const rows = ladderData.history.slice(-20).reverse().map((h) => {
