@@ -1,7 +1,8 @@
 /* Spellbound Chess — stone sound effects, synthesized with WebAudio (no audio files). */
 (function (root) {
   'use strict';
-  let ctx = null, enabled = true;
+  let ctx = null, enabled = true, level = 'on', master = null, soft = null;
+  const VOLUME = { on: 0.8, quiet: 0.35 };          // v1.1.4: a little quieter than before; Quiet is under half
 
   function ensure() {
     if (!enabled) return null;
@@ -9,9 +10,17 @@
       const AC = root.AudioContext || root.webkitAudioContext;
       if (!AC) return null;
       ctx = new AC();
+      soft = ctx.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 20000;
+      master = ctx.createGain(); soft.connect(master); master.connect(ctx.destination); applyLevel();
     }
     if (ctx.state === 'suspended') ctx.resume();
     return ctx;
+  }
+
+  function applyLevel() {
+    if (!master) return;
+    master.gain.value = VOLUME[level] || 0;
+    soft.frequency.value = level === 'quiet' ? 2600 : 20000;   // Quiet also takes the edge off the harsh highs
   }
 
   function noise(c, seconds, brown) {
@@ -32,7 +41,7 @@
     g.gain.exponentialRampToValueAtTime(peak, t0 + attack);
     g.gain.setValueAtTime(peak, t0 + attack + hold);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + attack + hold + release);
-    node.connect(g); g.connect(c.destination); return g;
+    node.connect(g); g.connect(soft || c.destination); return g;
   }
 
   function filtered(c, src, type, freq, q) {
@@ -86,6 +95,8 @@
   root.SBAudio = {
     play(name, arg) { try { if (enabled && sounds[name]) sounds[name](arg); } catch (e) { /* sound is optional */ } },
     setEnabled(v) { enabled = !!v; if (enabled) ensure(); },
+    setLevel(v) { level = v === 'quiet' ? 'quiet' : v === 'off' ? 'off' : 'on'; enabled = level !== 'off'; if (enabled) ensure(); applyLevel(); },
+    getLevel() { return level; },
     isEnabled() { return enabled; },
     unlock() { ensure(); },
   };

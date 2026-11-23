@@ -1146,6 +1146,7 @@ export function create(container) {
   return {
     el, is3D: true, setPosition, setOrientation, setView, mark, clearMarks, squareFromEvent, startDrag, moveDrag, endDrag, dragging,
     lift, relax, animateMove, topple, surrender, bow, pulseCheck, checkGuard, setThinking, showArrow,
+    shake(sq) { const o = pieceAt.get(sq); if (o && !reducedMotion()) return hesitate(o); },
     flare, intro, setTurn, setAlert, thunder, groundSquareFromEvent, piecesUnderPointer, noticeThreats, setCinematic, lastHitHeight: () => lastHitY, setSpeed(f) { speed = f; }, get orientation() { return orient; }, get view() { return view; },
   };
 }

@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=1.1.3');
+    worker = new Worker('engine.worker.js?v=1.1.4');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -200,8 +200,17 @@
   }
   document.addEventListener('visibilitychange', () => syncWake());
 
+  function updateModeChip() {
+    const chip = $('modeChip'); if (!chip) return;
+    const kind = puzzle ? 'puzzle' : watching ? 'watching' : (mode === 'rated' ? 'rated' : 'casual');
+    chip.textContent = kind === 'puzzle' ? 'Puzzle' : kind === 'watching' ? 'Watching' : kind === 'rated' ? 'Rated' : 'Casual';
+    chip.className = `mode-chip ${kind}`;
+    chip.title = kind === 'rated' ? 'This game counts on the leaderboard' : kind === 'casual' ? 'Practice game: undo, hints and danger warnings, not rated' : '';
+  }
+
   function updateButtons() {
     syncWake();
+    updateModeChip();
     const casualTurn = mode === 'casual' && !watching && phase === 'player' && !puzzle;
     $('takebackBtn').disabled = !casualTurn || game.sanHistory.length < (playerColor === 'w' ? 2 : 3);
     $('sfHintBtn').disabled = !casualTurn;
@@ -375,7 +384,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.1.3',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.1.4',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -671,9 +680,27 @@
   $('replayBtn').onclick = replayMoves;
   $('movesToggle').onclick = () => { const c = $('moveList').closest('.moves'); c.classList.toggle('expanded'); $('movesToggle').textContent = c.classList.contains('expanded') ? 'show less' : 'show all'; renderMoves(); };
 
-  function applySound() { window.SBAudio.setEnabled(settings.sound); $('soundLabel').textContent = settings.sound ? 'Sound on' : 'Sound off'; $('soundBtn').setAttribute('aria-pressed', String(settings.sound)); }
-  $('soundBtn').onclick = () => { settings.sound = !settings.sound; saveSettings(); applySound(); };
-  $('helpBtn').onclick = () => { $('helpOverlay').hidden = false; };
+  const soundLevel = () => (settings.sound === 'quiet' ? 'quiet' : settings.sound ? 'on' : 'off');
+  function applySound() {
+    const lv = soundLevel();
+    if (window.SBAudio.setLevel) window.SBAudio.setLevel(lv); else window.SBAudio.setEnabled(lv !== 'off');
+    $('soundLabel').textContent = lv === 'on' ? 'Sound on' : lv === 'quiet' ? 'Quiet' : 'Sound off';
+    $('soundBtn').setAttribute('aria-pressed', String(lv !== 'off'));
+    $('soundBtn').title = `Sound: ${lv === 'on' ? 'on' : lv === 'quiet' ? 'quiet' : 'off'} (tap to change)`;
+  }
+  $('soundBtn').onclick = () => {                              // On -> Quiet -> Off -> On
+    const lv = soundLevel();
+    settings.sound = lv === 'on' ? 'quiet' : lv === 'quiet' ? false : true;
+    saveSettings(); applySound();
+    if (settings.sound) window.SBAudio.play('tap');
+  };
+  function showHelp(full) {
+    $('helpShort').hidden = !!full; $('helpFull').hidden = !full;
+    $('helpOverlay').hidden = false;
+    const d = document.querySelector('#helpOverlay .dialog'); if (d) d.scrollTop = 0;
+  }
+  $('helpBtn').onclick = () => showHelp(true);
+  $('helpMore').onclick = () => showHelp(true);
   $('helpClose').onclick = () => { $('helpOverlay').hidden = true; settings.seenHelp = true; saveSettings(); window.SBAudio.unlock(); };
 
   /* ---------- Casual / Rated ---------- */
@@ -1159,6 +1186,16 @@
   applySpeed();
 
 
+  /* a short message over the board itself, where the player is looking (v1.1.4) */
+  let bannerTimer = null;
+  function showBanner(text, ms, good) {
+    const b = $('boardBanner'); if (!b) return;
+    b.textContent = text; b.classList.toggle('good', !!good); b.hidden = false;
+    b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
+    clearTimeout(bannerTimer); bannerTimer = setTimeout(() => { b.hidden = true; }, ms || 2200);
+  }
+  function hideBanner() { clearTimeout(bannerTimer); const b = $('boardBanner'); if (b) b.hidden = true; }
+
   /* ---------- daily puzzle (v1.1) ----------
      One position a day for everyone (puzzles.json, chosen by UTC date). The stones play the setup move, you find the
      line; a wrong move is a slip and you try again; a move that gives checkmate always counts. Named players' results
@@ -1196,8 +1233,8 @@
   function endPuzzle() {
     if (!puzzle) return;
     clearInterval(puzzleTimer); puzzleTimer = null;
-    puzzle = null; $('puzzleBar').hidden = true; $('puzzleOverlay').hidden = true;
-    document.body.classList.remove('puzzling');
+    puzzle = null; $('puzzleBar').hidden = true; $('puzzleOverlay').hidden = true; $('puzzleHint').hidden = true;
+    document.body.classList.remove('puzzling'); hideBanner();
     syncWake();
     setTimeout(() => offerUpdate(), 2500);
   }
@@ -1219,6 +1256,10 @@
       store.set('spellbound.joinAsked', day);            // ask once a day
       const join = await confirmBox("Join today's puzzle board?", 'Pick a leaderboard name first and your time counts. Or just play: your result stays in this browser.');
       if (join) await askName();
+    }
+    if (!store.get('spellbound.pzIntroSeen', false)) {           // v1.1.4: say how puzzles work, once
+      await new Promise((res) => { $('pzIntro').hidden = false; $('pzIntroGo').focus(); $('pzIntroGo').onclick = () => { $('pzIntro').hidden = true; res(); }; });
+      store.set('spellbound.pzIntroSeen', true);
     }
     await startPuzzle(day, e, !!practice);
   }
@@ -1245,7 +1286,7 @@
     }
     const who = playerColor === 'w' ? 'White (Moonstone)' : 'Black (Obsidian)';
     $('puzzleText').textContent = `🧩 Puzzle #${day} · ${practice ? 'practice' : 'rated ' + e.rating}`;
-    $('puzzleTimer').textContent = '0:00'; $('puzzleBar').hidden = false;
+    $('puzzleTimer').textContent = '0:00'; $('puzzleBar').hidden = false; $('puzzleHint').hidden = true;
     document.body.classList.add('puzzling');
     R.setOrientation(playerColor, game.board);
     syncBoard();
@@ -1276,17 +1317,19 @@
         if (!p.practice) store.set(PUZZLE_RUN, { day: p.day, mistakes: p.mistakes, startedAt: p.t0 });
         puzzleTimer = setInterval(() => { if (puzzle && !puzzle.over && puzzle.t0) $('puzzleTimer').textContent = fmtTime(Date.now() - puzzle.t0); }, 250);
         if (p.mistakes) $('puzzleText').textContent = `🧩 Puzzle #${p.day} · rated ${p.e.rating} · ${p.mistakes} slip${p.mistakes === 1 ? '' : 's'}`;
+        if (p.mistakes >= 3) $('puzzleHint').hidden = false;
       }
       phase = 'player'; refreshMarks();
       const who = playerColor === 'w' ? 'White' : 'Black';
       setStatus(p.step === 0 ? `Find the best move for ${who}` : `Stones played ${played.san} · keep going`, game.inCheck());
+      if (p.step === 0) showBanner(`Your turn: find the best move for ${who}`, 2600, true);
       return;
     }
     p.line.push(toUci(played));
     const st = game.status();
     p.step += 1;
     if ((st && st.reason === 'checkmate') || p.step >= p.solution.length) { await puzzleSolved(st && st.reason === 'checkmate'); return; }
-    phase = 'engine'; setStatus(`${played.san}! Correct…`);
+    phase = 'engine'; setStatus(`${played.san}! Correct…`); showBanner('Correct!', 1100, true);
     await wait(420);
     if (token !== gameToken || puzzle !== p) return;
     const reply = fromUci(p.solution[p.step]); p.step += 1;
@@ -1307,6 +1350,9 @@
     clearSelection();
     window.SBAudio.play('thud');
     setStatus(`Not quite. ${p.mistakes === 1 ? 'Look again: there is something better.' : `Try again (${p.mistakes} slips).`}`);
+    showBanner(p.mistakes >= 6 ? 'Not the best move. Stuck? Tap Hint, or Solution to see it.' : p.mistakes >= 3 ? 'Not the best move. Tap Hint if you want help.' : 'Not the best move. Try again.', p.mistakes >= 6 ? 3200 : 2200);
+    if (R.shake) R.shake(spec.from);
+    if (p.mistakes >= 3) $('puzzleHint').hidden = false;
     $('puzzleText').textContent = `🧩 Puzzle #${p.day} · ${p.practice ? 'practice' : 'rated ' + p.e.rating} · ${p.mistakes} slip${p.mistakes === 1 ? '' : 's'}`;
   }
 
@@ -1420,6 +1466,15 @@
 
   $('puzzleBtn').onclick = () => openPuzzle(false);
   $('puzzleGiveUp').onclick = () => giveUpPuzzle();
+  $('puzzleHint').onclick = () => {                              // lights up the piece to move; counts as a slip
+    const p = puzzle; if (!p || p.over || phase !== 'player') return;
+    const from = fromUci(p.solution[p.step]).from;
+    p.mistakes += 1; p.hints = (p.hints || 0) + 1;
+    if (!p.practice) store.set(PUZZLE_RUN, { day: p.day, mistakes: p.mistakes, startedAt: p.t0 });
+    $('puzzleText').textContent = `🧩 Puzzle #${p.day} · ${p.practice ? 'practice' : 'rated ' + p.e.rating} · ${p.mistakes} slip${p.mistakes === 1 ? '' : 's'}`;
+    showSelection(from);
+    showBanner('Hint: move the highlighted piece. (A hint counts as a slip.)', 3000, true);
+  };
   async function leavePuzzleOk() {
     if (!puzzle || puzzle.over || puzzle.practice || !puzzle.t0) return true;
     return confirmBox('Leave the puzzle?', 'You can come back to it today, but the clock keeps running from when you first opened it, and your slips are kept.');
@@ -1467,6 +1522,7 @@
   $('fbFromHelp').onclick = () => openFeedback('help');
   $('fbFromGame').onclick = () => openFeedback('game');
   $('fbFromPuzzle').onclick = () => openFeedback('puzzle');
+  $('fbFromStatus').onclick = () => openFeedback(puzzle ? 'puzzle' : 'status');
   $('fbCancel').onclick = closeFeedback;
   $('fbForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -1489,6 +1545,7 @@
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
     if (!$('fbOverlay').hidden) closeFeedback();
+    else if (!$('pzIntro').hidden) $('pzIntroGo').click();
     else if (!$('nameOverlay').hidden) $('nameCancel').click();
     else if (!$('puzzleOverlay').hidden) $('puzzleOverlay').hidden = true;
     else if (!$('confirmOverlay').hidden) $('confirmNo').click();
@@ -1540,7 +1597,7 @@
   setInterval(checkVersion, 10 * 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
   if (!R.is3D && flatWhy) setTimeout(() => toast(`Showing the flat board: ${flatWhy}.`, 7000), 1200); // says why, so it can be fixed
-  if (!settings.seenHelp) $('helpOverlay').hidden = false;
+  if (!settings.seenHelp) showHelp(false);
   refreshLadder().then(flushPending);
   newGame();
 })();

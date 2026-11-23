@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1.1.3">
+  <link rel="stylesheet" href="style.css?v=1.1.4">
 </head>
 <body>
   <div class="app" id="app">
@@ -35,12 +35,14 @@
           <span id="puzzleText" aria-live="polite"></span>
           <span class="puzzle-timer" id="puzzleTimer">0:00</span>
           <div class="review-buttons">
+            <button class="btn" id="puzzleHint" hidden>Hint</button>
             <button class="btn" id="puzzleGiveUp"><span class="pz-long">Show </span>solution</button>
             <button class="btn" id="puzzleExit">Exit</button>
           </div>
         </div>
         <div class="tray" id="trayTop" aria-label="Pieces taken"></div>
         <div class="board-wrap">
+          <div class="board-banner" id="boardBanner" role="status" hidden></div>
           <div id="board3d" class="board board3d" hidden></div>
           <svg id="board" class="board" role="img" aria-label="Chess board"></svg>
           <div class="piece-tip" id="pieceTip" hidden></div>
@@ -63,11 +65,14 @@
         </div>
         <div class="tray" id="trayBottom" aria-label="Pieces taken"></div>
         <div class="statusline">
-          <span id="status" aria-live="polite">Your move</span>
-          <form id="typeForm" class="type-form" autocomplete="off">
-            <label for="typeMove">Type a move</label>
-            <input id="typeMove" placeholder="Nf3 or e2e4" maxlength="8" spellcheck="false">
-          </form>
+          <span class="status-left"><span class="mode-chip" id="modeChip">Casual</span><span id="status" aria-live="polite">Your move</span></span>
+          <span class="status-right">
+            <form id="typeForm" class="type-form" autocomplete="off">
+              <label for="typeMove">Type a move</label>
+              <input id="typeMove" placeholder="Nf3 or e2e4" maxlength="8" spellcheck="false">
+            </form>
+            <button class="link status-fb" type="button" id="fbFromStatus">💬 Feedback</button>
+          </span>
         </div>
       </section>
 
@@ -266,8 +271,16 @@
 
   <div class="overlay" id="helpOverlay" hidden>
     <div class="dialog help">
-      <div class="result-title">How to play</div>
-      <ul>
+      <div class="result-title" id="helpTitle">How to play</div>
+      <div id="helpShort">
+        <ul>
+          <li>Tap one of your pieces, then a glowing square. Your stone warriors do the rest.</li>
+          <li>Start in <b>Casual</b>: undo, hints and danger warnings. Switch to <b>Rated</b> when you want to climb the leaderboard.</li>
+          <li>Try today's <b>🧩 puzzle</b>: one position a day, the same for everyone.</li>
+        </ul>
+        <p class="small"><button class="link" type="button" id="helpMore">Show the full guide</button> (also under <b>?</b> any time)</p>
+      </div>
+      <ul id="helpFull">
         <li>Click one of your pieces, then click a glowing square. You can also drag, or type moves like <b>Nf3</b>.</li>
         <li>Just want to see the battles? Press <b>▶ Watch</b>.</li>
         <li>After a game, open the <b>📜 Battle report</b>: a chart of who was winning, your accuracy, your biggest mistakes with the better move, and your best move replayed.</li>
@@ -281,6 +294,19 @@
       </ul>
       <p class="small fb-line">Something confusing or broken? <button class="link" type="button" id="fbFromHelp">Send feedback</button></p>
       <div class="dialog-buttons"><button class="btn primary" id="helpClose">Let's play</button></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="pzIntro" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pzIntroTitle">
+      <div class="result-title" id="pzIntroTitle">How the daily puzzle works</div>
+      <ul>
+        <li>The stones make a move. Then it's your turn: find the <b>best move</b> for your side.</li>
+        <li>Only the winning move is accepted. A wrong move bounces back and counts as a slip, so just try again.</li>
+        <li>It may take 2 or 3 moves in a row. The stones answer each one.</li>
+        <li>Stuck? After a few tries a <b>Hint</b> button shows which piece to move, and <b>Solution</b> plays it out.</li>
+      </ul>
+      <div class="dialog-buttons"><button class="btn primary" type="button" id="pzIntroGo">Got it, start</button></div>
     </div>
   </div>
 
@@ -300,21 +326,21 @@
   <div class="toast" id="toast" role="status" hidden></div>
   <div class="update-bar" id="updateBar" role="status" hidden>A new version of Spellbound Chess is ready. <button class="btn primary" id="updateBtn">Reload</button><button class="btn" id="updateLater" aria-label="Not now">Later</button></div>
 
-  <script src="config.js?v=1.1.3"></script>
-  <script src="rules.js?v=1.1.3"></script>
-  <script src="openings.js?v=1.1.3"></script>
-  <script src="engine.js?v=1.1.3"></script>
-  <script src="audio.js?v=1.1.3"></script>
-  <script src="render.js?v=1.1.3"></script>
-  <script src="ladder.js?v=1.1.3"></script>
-  <script src="sf.js?v=1.1.3"></script>
+  <script src="config.js?v=1.1.4"></script>
+  <script src="rules.js?v=1.1.4"></script>
+  <script src="openings.js?v=1.1.4"></script>
+  <script src="engine.js?v=1.1.4"></script>
+  <script src="audio.js?v=1.1.4"></script>
+  <script src="render.js?v=1.1.4"></script>
+  <script src="ladder.js?v=1.1.4"></script>
+  <script src="sf.js?v=1.1.4"></script>
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
   <script type="module">
     // Load the 3D board if the browser can; otherwise the flat board is used.
     try {
-      await Promise.race([import('./render3d.js?v=1.1.3'), new Promise((_, no) => setTimeout(() => no(new Error('the 3D files took too long to load')), 15000))]);
+      await Promise.race([import('./render3d.js?v=1.1.4'), new Promise((_, no) => setTimeout(() => no(new Error('the 3D files took too long to load')), 15000))]);
     } catch (e) { window.SB3DError = (e && e.message) || String(e); console.warn('Spellbound Chess: 3D board unavailable, using the flat board.', e); }
-    const s = document.createElement('script'); s.src = 'main.js?v=1.1.3'; document.body.appendChild(s);
+    const s = document.createElement('script'); s.src = 'main.js?v=1.1.4'; document.body.appendChild(s);
   </script>
 </body>
 </html>
