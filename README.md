@@ -27,12 +27,13 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 - You pick the name that shows on the leaderboard and can change it with the ✎ button, which also shows a recovery code for using your rating on another device
 - Works on phones: the board fills the screen width, the controls sit right under it, and the battle report opens full screen. In Tableau, add a Phone device layout holding the same Web Page object.
 - Respects your system's reduced-motion setting
+- 🧩 **Daily puzzle**: one position a day, the same for everyone (new at midnight UTC). The stones play their move, you find the winning line; a wrong move is a slip and you try again, and any move that gives checkmate counts. Mondays are easiest and Sundays hardest. You get your time, slips, a day streak and a result to share; named players appear on the PUZZLE leaderboard tab (first-try solves first, then fastest). The puzzle server checks the line and the database keeps the time from when the puzzle first opens (a solve under 3 seconds is refused), so a time can't simply be typed in. Slips are counted by the browser, and a determined cheater could still read the answer: the board is for fun, not proof
 
 ## Online leaderboard (optional)
 
 Scores are kept in each player's browser until you connect a free [Supabase](https://supabase.com) project:
 
-1. Create a project, open **SQL Editor**, paste `supabase.sql` and run it, then do the same with `supabase-update-v0.5.sql` and `supabase-update-v0.6.1.sql`. Deploy the Edge Function in `supabase/functions/submit-game/index.ts` (Edge Functions → Deploy a new function → Via Editor, name `submit-game`, turn off "Enforce JWT verification"), then run `supabase-update-v1.0.sql`.
+1. Create a project, open **SQL Editor**, paste `supabase.sql` and run it, then do the same with `supabase-update-v0.5.sql` and `supabase-update-v0.6.1.sql`. Deploy the Edge Function in `supabase/functions/submit-game/index.ts` (Edge Functions → Deploy a new function → Via Editor, name `submit-game`, turn off "Enforce JWT verification"), then run `supabase-update-v1.0.sql`. For the daily puzzle, run `supabase-update-v1.1.sql` and `-v1.1.1.sql` and deploy `supabase/functions/puzzle/index.ts` the same way (name `puzzle`, JWT verification off); it reads the puzzle list from this site's `puzzles.json`.
 2. In **Project Settings → API Keys**, copy the **Publishable key** (starts with `sb_publishable_`) into `config.js`, and copy the **Project URL** from **Project Settings → Data API** (or the project's Connect screen).
 3. Commit. The leaderboard chip changes from ○ LOCAL to ● LIVE.
 
@@ -56,6 +57,9 @@ Each browser also replays its games' moves and refuses to submit any that are il
 | `ladder.js` | Saving games, verification, Elo, and the leaderboard |
 | `main.js` | Game flow and controls |
 | `config.js` | Supabase settings (empty = local mode) |
+| `puzzles.json` | The daily puzzles: 1,092 days (156 weeks, to 18 Nov 2029, no repeats) from the [Lichess puzzle database](https://database.lichess.org/#puzzles) (public domain, CC0), rated 1000–1650, popularity 90+, 2,000+ plays, one per source game, each checked with the game's own rules. Day 1 = 23 Nov 2026 (UTC); the list repeats after the last day. Adding puzzles to the end never changes earlier days |
+| `supabase/functions/` | Server-side checks: `submit-game` (replays rated games) and `puzzle` (checks puzzle solutions; the database times them) |
+| `supabase-update-v1.0.sql`, `-v1.1.sql` | v1.0: only the Edge Function can save games. v1.1: puzzle results table, leaderboard view and streaks. v1.1.1: 3-second floor on solved times; hidden players left out of puzzle history |
 | `supabase.sql` | Database table and access rules |
 
 ## Tableau Public
@@ -68,4 +72,4 @@ This game is released under the GNU General Public License v3 because it include
 
 ## Credits
 
-Piece designs, code and sounds are original. Stockfish © the Stockfish developers; Stockfish.js © Chess.com, LLC (GPLv3). Title font: [Cinzel](https://fonts.google.com/specimen/Cinzel) (SIL Open Font License), from Google Fonts.
+Piece designs, code and sounds are original. Daily puzzles come from the Lichess puzzle database, released into the public domain by Lichess. Stockfish © the Stockfish developers; Stockfish.js © Chess.com, LLC (GPLv3). Title font: [Cinzel](https://fonts.google.com/specimen/Cinzel) (SIL Open Font License), from Google Fonts.

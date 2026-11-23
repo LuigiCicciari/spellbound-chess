@@ -310,3 +310,29 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
 .ladder .tabs .tab { padding-left: 7px; padding-right: 7px; }
 .result-tip { font-size: 13px; color: var(--text); background: rgba(242, 142, 43, .1); border: 1px solid rgba(242, 142, 43, .45); border-radius: 8px; padding: 8px 10px; margin: 8px 0 2px; text-align: left; }
 .card-head .opening { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--rune-w); font-size: 12px; margin-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; display: inline-block; vertical-align: bottom; }
+
+/* daily puzzle (v1.1) */
+.puzzle-btn { position: relative; }
+.puzzle-dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--rune-b, #F28E2B); box-shadow: 0 0 0 2px var(--bg, #1B1C22); }
+.puzzle-bar { position: static; border-color: var(--rune-w); width: min(100%, calc(100vh - 56px - 24px - 24px - 2 * 34px - 70px)); box-sizing: border-box; margin: 4px 0 2px; padding: 6px 10px; }
+.puzzle-bar #puzzleText { flex: 1; }
+.puzzle-timer { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 3.2em; text-align: right; }
+.puzzle-stats { display: flex; gap: 18px; justify-content: center; margin: 12px 0 6px; flex-wrap: wrap; }
+.puzzle-stats div { text-align: center; }
+.puzzle-stats b { display: block; font: 700 22px var(--serif); }
+.puzzle-stats span { font-size: 12px; color: var(--text-2); letter-spacing: .05em; }
+.share-preview { background: var(--bg, #1B1C22); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: 13px/1.4 ui-monospace, monospace; white-space: pre-wrap; margin: 8px 0; text-align: left; }
+.puzzle-row.me td { color: var(--text); font-weight: 700; }
+@media (max-width: 700px) {
+  .foot-puzzles { display: none; }            /* keeps the phone page the same height as v1.0.1 */
+  .ladder .card-head { row-gap: 0; }
+  .puzzle-bar { width: 100%; gap: 6px; padding: 5px 8px; font-size: 13px; }
+  .puzzle-bar #puzzleText { min-width: 0; flex: 1 1 140px; }
+  .puzzle-bar .review-buttons .btn { padding: 4px 8px; }
+  .ladder .card-head { flex-wrap: wrap; gap: 4px; }
+  .ladder .tabs { flex-wrap: wrap; }
+  .ladder .tabs .tab { padding-left: 5px; padding-right: 5px; letter-spacing: .04em; line-height: 13px; }
+}
+.ladder .card-head { flex-wrap: wrap; row-gap: 4px; }
+.ladder .tabs { flex-wrap: wrap; }
+.ladder .tabs .tab { white-space: nowrap; }

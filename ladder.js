@@ -225,7 +225,36 @@
     catch (e) { return false; }
   }
 
-  const api = { verify, compute, preview, board, levelBoard, save, rename, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
+  /* ---------- daily puzzle (v1.1) ---------- */
+  // All writes go through the "puzzle" Edge Function: it checks the solution, and the database keeps the clock.
+  // Each returns the server's JSON, or { error, transient } (transient = couldn't reach it; refused = not transient).
+  async function puzzleCall(body) {
+    if (!live()) return { error: 'offline', transient: true };
+    try {
+      const r = await callFunction('puzzle', JSON.stringify(body));
+      if (r === NOT_DEPLOYED) return { error: 'puzzle leaderboard not set up yet', transient: true };
+      return r || {};
+    } catch (e) {
+      return { error: e.message || 'network error', transient: !(e.status && e.status < 500) };
+    }
+  }
+  const puzzleStart = (who, day) => puzzleCall({ action: 'start', day, p_player_id: who.player_id, p_secret: who.secret, p_handle: who.handle, p_start_rating: who.start });
+  const puzzleFinish = (who, day, solved, moves, mistakes) => puzzleCall({ action: 'finish', day, solved, moves, mistakes, p_player_id: who.player_id, p_secret: who.secret });
+  async function puzzleBoard(day, playerId) {
+    if (!live()) return null;
+    try {
+      const top = await rest(`puzzle_board?select=player_id,handle,ms,mistakes,rank&day=eq.${Number(day)}&order=rank.asc,ms.asc&limit=10`);
+      let me = null, streak = 0;
+      if (playerId) {
+        const mine = await rest(`puzzle_board?select=player_id,handle,ms,mistakes,rank&day=eq.${Number(day)}&player_id=eq.${encodeURIComponent(playerId)}`);
+        me = mine[0] || null;
+        streak = Number(await rest('rpc/puzzle_streak', { method: 'POST', body: JSON.stringify({ p_player_id: playerId, p_day: Number(day) }) })) || 0;
+      }
+      return { top: top.map((r) => ({ ...r, ms: Number(r.ms), mistakes: Number(r.mistakes), rank: Number(r.rank) })), me, streak };
+    } catch (e) { return null; }
+  }
+
+  const api = { verify, compute, preview, board, levelBoard, save, rename, puzzleStart, puzzleFinish, puzzleBoard, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SBLadder = api;
 })(typeof window !== 'undefined' ? window : this);

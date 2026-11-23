@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=1.0.1');
+    worker = new Worker('engine.worker.js?v=1.1.1');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -119,8 +119,13 @@
   const openingOf = (sans) => (window.SBOpenings ? window.SBOpenings.name(sans) : '');
   function renderMoves() {
     const ol = $('moveList'); ol.innerHTML = '';
-    const op = openingOf(game.sanHistory); $('openingName').textContent = op ? '· ' + op : ''; $('openingName').title = op;
+    const op = puzzle ? '' : openingOf(game.sanHistory); $('openingName').textContent = op ? '· ' + op : ''; $('openingName').title = op;
     const h = game.sanHistory;
+    if (puzzle) { // a puzzle starts mid-game: number from the puzzle position, and Black may move first
+      let n = puzzle.moveNo, i = 0;
+      if (puzzle.firstColor === 'b') { const li = document.createElement('li'); li.innerHTML = `<b>${n}…</b>${h[0] || ''}`; ol.appendChild(li); i = 1; n++; }
+      for (; i < h.length; i += 2, n++) { const li = document.createElement('li'); li.innerHTML = `<b>${n}.</b>${h[i]}${h[i + 1] ? ' ' + h[i + 1] : ''}`; ol.appendChild(li); }
+    } else
     for (let i = 0; i < h.length; i += 2) {
       const li = document.createElement('li');
       li.innerHTML = `<b>${i / 2 + 1}.</b>${h[i]}${h[i + 1] ? ' ' + h[i + 1] : ''}`;
@@ -152,7 +157,7 @@
      reminder, not a full blunder check. */
   const PVAL = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 100 };
   function dangerSquares() {
-    if (rated() || !settings.danger || watching || !playerColor || phase === 'over' || phase === 'replay' || phase === 'review') return [];
+    if (puzzle || rated() || !settings.danger || watching || !playerColor || phase === 'over' || phase === 'replay' || phase === 'review') return [];
     const me = playerColor, them = me === 'w' ? 'b' : 'w', out = [], cheapest = new Array(64).fill(Infinity);
     for (let s = 0; s < 64; s++) {
       const p = game.board[s];
@@ -182,16 +187,17 @@
     $('dangerBtn').setAttribute('aria-pressed', String(!!settings.danger));
   }
   function updateButtons() {
-    const casualTurn = mode === 'casual' && !watching && phase === 'player';
+    const casualTurn = mode === 'casual' && !watching && phase === 'player' && !puzzle;
     $('takebackBtn').disabled = !casualTurn || game.sanHistory.length < (playerColor === 'w' ? 2 : 3);
     $('sfHintBtn').disabled = !casualTurn;
     const live = !watching && (phase === 'player' || phase === 'engine');
-    $('drawBtn').disabled = !live || game.sanHistory.length < 2;
-    $('resignBtn').disabled = watching || !['player', 'engine', 'animating'].includes(phase) || game.sanHistory.length < 1;
+    $('drawBtn').disabled = !!puzzle || !live || game.sanHistory.length < 2;
+    $('resignBtn').disabled = !!puzzle || watching || !['player', 'engine', 'animating'].includes(phase) || game.sanHistory.length < 1;
   }
 
   /* ---------- game flow ---------- */
   async function newGame() {
+    endPuzzle();
     if (store.get(PENDING, null) && !saveInFlight) flushPending();
     if (reviewState) endReview(false);
     reportToken++; $('reportOverlay').hidden = true;
@@ -255,6 +261,7 @@
     if (token !== gameToken) return true;
     lastMove = { from: played.from, to: played.to };
     syncBoard(false);
+    if (puzzle) { await puzzleAfterMove(played, byPlayer, token); updateButtons(); return true; }
     if (!watching) { notePending(); if (game.sanHistory.length <= 2) updateMode(); }
     const moverName = colorOf(played.piece) === playerColor ? 'You' : 'Stones';
     const st = game.status();
@@ -353,7 +360,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.0.1',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.1.1',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -362,6 +369,7 @@
   const PENDING = 'spellbound.pending';
   let saveInFlight = false;   // a save is on its way: don't send the same game again from the pending record
   function notePending() {
+    if (puzzle) return;
     if (unrated || !rated()) { clearPending(); return; }
     if (watching || !profile.handle || !profile.start || phase === 'over' || phase === 'replay' || game.sanHistory.length < 2) return;
     store.set(PENDING, recordFor('L', 'resign'));
@@ -447,6 +455,7 @@
     const token = gameToken;
     if (options[0].promotion) { promotion = await pickPromotion(); if (!promotion) { if (phase === 'player') clearSelection(); return true; } }
     if (token !== gameToken || phase !== 'player') return true;
+    if (puzzle) { await puzzleTry({ from, to, promotion }, token); return true; }
     if (!(await stalemateOk({ from, to, promotion }, token))) { if (phase === 'player') clearSelection(); return true; }
     await playMove({ from, to, promotion });
     return true;
@@ -567,12 +576,14 @@
     game.undo();
     inp.value = '';
     const spec = { from: probe.from, to: probe.to, promotion: probe.promotion };
+    if (puzzle) { await puzzleTry(spec, gameToken); return; }
     if (!(await stalemateOk(spec, gameToken))) return;
     await playMove(spec);
   });
 
   /* ---------- buttons ---------- */
   $('newBtn').onclick = async () => {
+    if (puzzle) { if (await leavePuzzleOk()) newGame(); return; }
     if (watching) { newGame(); return; }
     if (['player', 'engine', 'animating', 'intro'].includes(phase) && game.sanHistory.length > 1) {
       const ok = await confirmBox('Abandon this game?', rated() && profile.handle ? 'It counts as a loss on the leaderboard.' : 'It counts as a resignation.');
@@ -604,6 +615,7 @@
     else toast('The stones refuse your draw: they think they are winning.');
   };
   function startWatch() {
+    endPuzzle();
     if (reviewState) endReview(false);
     reportToken++; $('reportOverlay').hidden = true;
     gameToken++;
@@ -623,6 +635,7 @@
     })();
   }
   $('watchBtn').onclick = async () => {
+    if (puzzle) { if (await leavePuzzleOk()) startWatch(); return; }
     if (watching) { newGame(); return; }
     if (['player', 'engine', 'animating', 'intro'].includes(phase) && game.sanHistory.length > 1) {
       const ok = await confirmBox('Leave this game to watch?', rated() && profile.handle ? 'It counts as a loss on the leaderboard.' : 'It counts as a resignation.');
@@ -1027,6 +1040,7 @@
     const body = $('ladderBody'); if (!ladderData) { body.innerHTML = ''; return; }
     const me = profile.player_id;
     if (ladderTab === 'levels') { renderLevels($('ladderBody')); return; }
+    if (ladderTab === 'puzzle') { renderPuzzleTab($('ladderBody')); return; }
     if (ladderTab === 'mine') {
       if (!ladderData.history.length) { body.innerHTML = '<div class="empty">Your saved games will show here.</div>'; return; }
       const rows = ladderData.history.slice(-20).reverse().map((h) => {
@@ -1059,7 +1073,7 @@
   document.querySelectorAll('.tab').forEach((b) => { b.onclick = () => { document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === b)); ladderTab = b.dataset.tab; renderLadder(); }; });
 
   /* ---------- hint ---------- */
-  function hintNode() { return book && game.sanHistory.length <= 10 ? book[game.sanHistory.join(' ')] : null; }
+  function hintNode() { return !puzzle && book && game.sanHistory.length <= 10 ? book[game.sanHistory.join(' ')] : null; }
   function updateHint() { $('hintBtn').hidden = !book; if (!$('hintPanel').hidden) renderHint(); }
   function renderHint() {
     const panel = $('hintPanel'), node = hintNode();
@@ -1129,10 +1143,281 @@
   $('speedSel').onchange = () => { settings.speed = $('speedSel').value; saveSettings(); applySpeed(); };
   applySpeed();
 
+
+  /* ---------- daily puzzle (v1.1) ----------
+     One position a day for everyone (puzzles.json, chosen by UTC date). The stones play the setup move, you find the
+     line; a wrong move is a slip and you try again; a move that gives checkmate always counts. Named players' results
+     go to the puzzle leaderboard through the "puzzle" Edge Function, which checks the line, while the database keeps
+     the time (it starts when the puzzle opens). Everyone else keeps their results in this browser. */
+  const PUZZLE_EPOCH = Date.UTC(2026, 10, 23);              // puzzle #1 = 23 Nov 2026, UTC
+  const PUZZLES = 'spellbound.puzzles';                       // { [day]: { solved, ms, mistakes, id, server } }
+  const PUZZLE_RUN = 'spellbound.puzzleRun';                 // { day, mistakes, startedAt } for the puzzle in progress
+  let puzzle = null, puzzleData = null, puzzleTimer = null, puzzleBoardCache = null;
+  const puzzleDay = () => Math.max(1, Math.floor((Date.now() - PUZZLE_EPOCH) / 86400000) + 1);
+  const fmtTime = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor(s / 60) % 60}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const toUci = (m) => window.SBRules.sqName(m.from) + window.SBRules.sqName(m.to) + (m.promotion ? typeOf(m.promotion).toLowerCase() : '');
+  const fromUci = (u) => ({ from: window.SBRules.sqIndex(u.slice(0, 2)), to: window.SBRules.sqIndex(u.slice(2, 4)), promotion: u[4] || null });
+  const untilNext = () => { const ms = PUZZLE_EPOCH + puzzleDay() * 86400000 - Date.now(); return `${Math.floor(ms / 3600000)}h ${Math.floor(ms / 60000) % 60}m`; };
+  const puzzleHistory = () => store.get(PUZZLES, {});
+  function localStreak(day) {
+    const h = puzzleHistory(); let d = h[day] && h[day].solved ? day : day - 1, n = 0;
+    while (h[d] && h[d].solved) { n++; d--; }
+    return n;
+  }
+  async function loadPuzzles() {
+    if (puzzleData) return puzzleData;
+    const v = (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '';
+    const r = await fetch(`puzzles.json?v=${v}`);
+    if (!r.ok) throw new Error('puzzles.json ' + r.status);
+    puzzleData = await r.json();
+    return puzzleData;
+  }
+  function puzzleFor(day) {
+    const list = puzzleData.list, e = list[(((day - 1) % list.length) + list.length) % list.length];
+    return { id: e.id, fen: e.fen, setup: e.setup, solution: atob(e.sol).split(' '), rating: e.rating, themes: e.themes || [] };
+  }
+  function updatePuzzleDot() { const h = puzzleHistory()[puzzleDay()]; $('puzzleDot').hidden = !!(h && (h.solved !== undefined)); }
+
+  function endPuzzle() {
+    if (!puzzle) return;
+    clearInterval(puzzleTimer); puzzleTimer = null;
+    puzzle = null; $('puzzleBar').hidden = true; $('puzzleOverlay').hidden = true;
+  }
+
+  async function openPuzzle(practice) {
+    try { await loadPuzzles(); } catch (e) { toast("Couldn't load today's puzzle. Check your connection and try again."); return; }
+    const day = puzzleDay(), e = puzzleFor(day), done = puzzleHistory()[day];
+    if (done && done.solved !== undefined && !practice) { showPuzzleResult(day, e, done, true); return; }
+    if (puzzle && !puzzle.over) { toast("Today's puzzle is already on the board."); return; }
+    if (midGame() && !puzzle) {
+      const ratedGame = rated() && profile.handle && !watching && game.sanHistory.length > 1;
+      const ok = await confirmBox('Leave this game for the puzzle?', ratedGame ? 'Your rated game counts as a loss.' : 'This game will be dropped.');
+      if (!ok) return;
+      if (ratedGame) { gameToken++; await endGame(playerColor === 'w' ? '0-1' : '1-0', 'resign'); }
+    }
+    // to be on the puzzle board you need a name before the clock starts (naming afterwards would skip the clock)
+    const live = window.SBLadder.isLiveConfigured();
+    if (!practice && live && !profile.handle && store.get('spellbound.joinAsked', 0) !== day) {
+      store.set('spellbound.joinAsked', day);            // ask once a day
+      const join = await confirmBox("Join today's puzzle board?", 'Pick a leaderboard name first and your time counts. Or just play: your result stays in this browser.');
+      if (join) await askName();
+    }
+    await startPuzzle(day, e, !!practice);
+  }
+
+  async function startPuzzle(day, e, practice) {
+    endPuzzle();
+    if (reviewState) endReview(false);
+    reportToken++; $('reportOverlay').hidden = true;
+    gameToken++;
+    const token = gameToken;
+    $('resultOverlay').hidden = true; $('promo').hidden = true; $('hintPanel').hidden = true;
+    R.setThinking('w', false); R.setThinking('b', false); R.showArrow(-1);
+    watching = false; $('watchBtn').textContent = '▶ Watch';
+    clock = null; showClocks(false);
+    game = new Game(e.fen); lastMove = null; gameOver = null; selected = null; savedThisGame = true; unrated = true;
+    const firstColor = game.turn;
+    playerColor = firstColor === 'w' ? 'b' : 'w';               // the stones play the setup move, you answer
+    puzzle = { day, e, solution: e.solution, practice, step: 0, mistakes: 0, line: [], t0: 0, over: false, firstColor,
+               moveNo: Number(e.fen.split(' ')[5]) || 1, server: null, serverStarted: null };
+    if (!practice) {                                           // carry slips and the start time over a reload or reopen
+      const run = store.get(PUZZLE_RUN, null);
+      if (run && run.day === day) { puzzle.mistakes = run.mistakes || 0; puzzle.resumeAt = run.startedAt || 0; }
+      else store.set(PUZZLE_RUN, { day, mistakes: 0, startedAt: 0 });
+    }
+    const who = playerColor === 'w' ? 'White (Moonstone)' : 'Black (Obsidian)';
+    $('puzzleText').textContent = `🧩 Puzzle #${day} · ${practice ? 'practice' : 'rated ' + e.rating}`;
+    $('puzzleTimer').textContent = '0:00'; $('puzzleBar').hidden = false;
+    R.setOrientation(playerColor, game.board);
+    syncBoard();
+    phase = 'animating'; updateButtons();
+    setStatus(`Puzzle #${day} · you play ${who}. Watch the stones' move…`);
+    // named + online: the server's clock starts now (only the first open of the day counts)
+    if (!practice && profile.handle && window.SBLadder.isLiveConfigured()) {
+      puzzle.serverStarted = window.SBLadder.puzzleStart(profile, day).then((r) => {
+        if (r && r.finished && puzzle && puzzle.day === day) {
+          puzzle.practice = true; $('puzzleText').textContent = `🧩 Puzzle #${day} · practice`;
+          toast('You already finished this puzzle on another device, so this one is practice.', 4500);
+        }
+        return r;
+      });
+    }
+    await wait(900);
+    if (token !== gameToken || !puzzle) return;
+    await playMove(fromUci(e.setup));
+  }
+
+  /* called by playMove after every move while a puzzle is on */
+  async function puzzleAfterMove(played, byPlayer, token) {
+    const p = puzzle;
+    if (!byPlayer) {
+      if (p.over) { phase = 'idle'; return; }        // giving up: the solution player takes over from here
+      if (!p.t0) {
+        p.t0 = p.resumeAt || Date.now();
+        if (!p.practice) store.set(PUZZLE_RUN, { day: p.day, mistakes: p.mistakes, startedAt: p.t0 });
+        puzzleTimer = setInterval(() => { if (puzzle && !puzzle.over && puzzle.t0) $('puzzleTimer').textContent = fmtTime(Date.now() - puzzle.t0); }, 250);
+        if (p.mistakes) $('puzzleText').textContent = `🧩 Puzzle #${p.day} · rated ${p.e.rating} · ${p.mistakes} slip${p.mistakes === 1 ? '' : 's'}`;
+      }
+      phase = 'player'; refreshMarks();
+      const who = playerColor === 'w' ? 'White' : 'Black';
+      setStatus(p.step === 0 ? `Find the best move for ${who}` : `Stones played ${played.san} · keep going`, game.inCheck());
+      return;
+    }
+    p.line.push(toUci(played));
+    const st = game.status();
+    p.step += 1;
+    if ((st && st.reason === 'checkmate') || p.step >= p.solution.length) { await puzzleSolved(st && st.reason === 'checkmate'); return; }
+    phase = 'engine'; setStatus(`${played.san}! Correct…`);
+    await wait(420);
+    if (token !== gameToken || puzzle !== p) return;
+    const reply = fromUci(p.solution[p.step]); p.step += 1;
+    await playMove(reply);
+  }
+
+  /* the player tried a move: is it the solution (or checkmate)? */
+  async function puzzleTry(spec, token) {
+    const p = puzzle; if (!p || p.over || phase !== 'player') return;
+    const want = p.solution[p.step];
+    const tried = game.move(spec); if (!tried) return;
+    const mates = (() => { const st = game.status(); return !!st && st.reason === 'checkmate'; })();
+    game.undo();
+    const u = toUci(tried);
+    if (mates || (u.slice(0, 4) === want.slice(0, 4) && (want[4] || 'q') === (u[4] || 'q'))) { await playMove(spec); return; }
+    p.mistakes += 1;
+    if (!p.practice) store.set(PUZZLE_RUN, { day: p.day, mistakes: p.mistakes, startedAt: p.t0 });
+    clearSelection();
+    window.SBAudio.play('thud');
+    setStatus(`Not quite. ${p.mistakes === 1 ? 'Look again: there is something better.' : `Try again (${p.mistakes} slips).`}`);
+    $('puzzleText').textContent = `🧩 Puzzle #${p.day} · ${p.practice ? 'practice' : 'rated ' + p.e.rating} · ${p.mistakes} slip${p.mistakes === 1 ? '' : 's'}`;
+  }
+
+  async function puzzleSolved(mate) {
+    const p = puzzle; p.over = true; phase = 'over'; updateButtons();
+    const localMs = Date.now() - p.t0;
+    clearInterval(puzzleTimer); puzzleTimer = null;
+    $('puzzleTimer').textContent = fmtTime(localMs);
+    setStatus(mate ? 'Checkmate! Puzzle solved' : 'Puzzle solved!');
+    if (mate) { const loser = game.turn; if (R.setAlert) R.setAlert('mate', loser === 'w' ? 'b' : 'w'); await (R.surrender || R.topple)(game.kingSquare(loser)); }
+    else window.SBAudio.play('chime');
+    await finishPuzzle(true, localMs);
+  }
+
+  async function giveUpPuzzle() {
+    const p = puzzle; if (!p || p.over) return;
+    if (!(await confirmBox('Show the solution?', p.practice ? 'The stones will play it out.' : "Today's puzzle will count as not solved."))) return;
+    if (puzzle !== p) return;
+    p.over = true; p.gaveUp = true;
+    const localMs = p.t0 ? Date.now() - p.t0 : 0;
+    clearInterval(puzzleTimer); puzzleTimer = null;
+    const token = gameToken;
+    while (phase === 'animating' || phase === 'engine') { await wait(100); if (token !== gameToken) return; }
+    setStatus('The solution…');
+    const rest = p.solution.slice(p.step);
+    p.step = p.solution.length;
+    for (const u of rest) {
+      if (token !== gameToken) return;
+      const played = game.move(fromUci(u)); if (!played) break;
+      phase = 'animating'; updateButtons(); R.showArrow(-1);
+      await R.animateMove(played, { celebrate: false });
+      if (token !== gameToken) return;
+      lastMove = { from: played.from, to: played.to }; syncBoard(false);
+      await wait(350);
+    }
+    phase = 'over'; updateButtons(); setStatus('That was the solution');
+    await finishPuzzle(false, localMs);
+  }
+
+  async function finishPuzzle(solved, localMs) {
+    const p = puzzle, day = p.day;
+    let rec = { solved, ms: Math.round(localMs), mistakes: p.mistakes, id: p.e.id, server: false };
+    let note = '';
+    if (!p.practice) {
+      if (p.serverStarted) {
+        const started = await p.serverStarted;
+        if (started && !started.error && !started.finished) {
+          const r = await window.SBLadder.puzzleFinish(profile, day, solved, p.line, p.mistakes);
+          if (r && !r.error) { rec = { ...rec, ms: Number(r.ms) || rec.ms, server: true, rank: r.rank, of: r.of, streak: r.streak }; }
+          else note = r && r.transient ? "Couldn't reach the puzzle board; your result is saved in this browser." : `Not saved on the board: ${(r && r.error) || 'unknown error'}.`;
+        } else if (started && started.error) note = started.transient ? "Couldn't reach the puzzle board; your result is saved in this browser." : `Not on the board: ${started.error}.`;
+      }
+      const h = puzzleHistory(); h[day] = rec; store.set(PUZZLES, h);
+      store.set(PUZZLE_RUN, null);
+      updatePuzzleDot();
+    }
+    if (puzzle !== p) return;
+    puzzleBoardCache = null;
+    if (ladderTab === 'puzzle') renderLadder();
+    await wait(solved ? 700 : 300);
+    if (puzzle !== p) return;
+    showPuzzleResult(day, p.e, rec, false, note, p.practice);
+  }
+
+  function shareText(day, rec) {
+    const slips = rec.mistakes === 0 ? 'first try' : `${rec.mistakes} slip${rec.mistakes === 1 ? '' : 's'}`;
+    const streak = rec.streak || localStreak(day);
+    return `Spellbound Chess 🧩 #${day}\n${rec.solved ? `✅ ${slips} · ${fmtTime(rec.ms)}` : '❌ not solved'}${streak > 1 ? `\n🔥 ${streak} days in a row` : ''}\nluigicicciari.github.io/spellbound-chess`;
+  }
+
+  function showPuzzleResult(day, e, rec, already, note, practice) {
+    $('puzzleTitle').textContent = practice ? (rec.solved ? 'Solved (practice)' : 'Practice over') : rec.solved ? (rec.mistakes === 0 ? 'Solved, first try!' : 'Solved!') : 'Not this time';
+    $('puzzleSub').textContent = already ? `You've done today's puzzle #${day}. A new one arrives in ${untilNext()}.`
+      : `Puzzle #${day} · rated ${e.rating} on Lichess · ${day < puzzleDay() ? 'a new puzzle is out now' : `next puzzle in ${untilNext()}`}`;
+    const streak = rec.streak || localStreak(day);
+    const cells = [[rec.solved ? fmtTime(rec.ms) : '—', 'TIME'], [String(rec.mistakes), rec.mistakes === 1 ? 'SLIP' : 'SLIPS'], [`🔥 ${streak}`, 'STREAK']];
+    if (rec.rank) cells.push([`#${rec.rank}`, `OF ${rec.of} TODAY`]);
+    $('puzzleStats').innerHTML = practice ? '' : cells.map(([a, b]) => `<div><b>${esc(a)}</b><span>${esc(b)}</span></div>`).join('');
+    $('puzzleShare').hidden = !!practice; $('puzzleShareBtn').hidden = !!practice;
+    $('puzzleShare').textContent = shareText(day, rec);
+    $('puzzleLichess').href = `https://lichess.org/training/${encodeURIComponent(e.id)}`;
+    $('puzzleNameBtn').hidden = !!practice || !!profile.handle || !window.SBLadder.isLiveConfigured();
+    $('puzzleNote').textContent = note || (already ? '' : (!practice && !rec.server && !profile.handle ? 'Pick a name before tomorrow’s puzzle and your times count on the board.' : ''));
+    $('puzzlePlay').textContent = already ? 'Practice it again' : 'Play a game';
+    $('puzzlePlay').onclick = () => { $('puzzleOverlay').hidden = true; if (already) openPuzzle(true); else newGame(); };
+    $('puzzleOverlay').hidden = false;
+    $('puzzleShareBtn').focus();
+  }
+
+  async function renderPuzzleTab(body) {
+    const day = puzzleDay();
+    body.innerHTML = `<div class="empty">Loading puzzle #${day}…</div>`;
+    const data = puzzleBoardCache && puzzleBoardCache.day === day ? puzzleBoardCache.data : await window.SBLadder.puzzleBoard(day, profile.handle ? profile.player_id : null);
+    puzzleBoardCache = data ? { day, data } : null;
+    if (ladderTab !== 'puzzle') return;
+    const mine = puzzleHistory()[day];
+    const streak = data && profile.handle ? data.streak : localStreak(day);
+    const head = `<div class="small">Puzzle #${day} · new one in ${untilNext()} · your streak 🔥 ${streak}${mine && mine.solved !== undefined ? '' : ' · <button class="link" id="puzzleTabGo">solve it now</button>'}</div>`;
+    if (!data) { body.innerHTML = head + `<div class="empty">${window.SBLadder.isLiveConfigured() ? "Couldn't load the puzzle board." : 'Puzzle board needs the online leaderboard.'}</div>`; }
+    else if (!data.top.length) body.innerHTML = head + '<div class="empty">Nobody has solved today’s puzzle yet. Be the first.</div>';
+    else {
+      const row = (r) => `<tr class="puzzle-row${r.player_id === profile.player_id ? ' me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.handle)}</td><td class="num">${fmtTime(r.ms)}</td><td class="num">${r.mistakes === 0 ? '✓ first try' : r.mistakes + ' slip' + (r.mistakes === 1 ? '' : 's')}</td></tr>`;
+      let rows = data.top.map(row).join('');
+      if (data.me && !data.top.some((r) => r.player_id === profile.player_id)) rows += row({ ...data.me, ms: Number(data.me.ms), mistakes: Number(data.me.mistakes) });
+      body.innerHTML = head + `<table><thead><tr><th class="num">#</th><th>Name</th><th class="num">Time</th><th class="num"></th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    const go = $('puzzleTabGo'); if (go) go.onclick = () => openPuzzle(false);
+  }
+
+  $('puzzleBtn').onclick = () => openPuzzle(false);
+  $('puzzleGiveUp').onclick = () => giveUpPuzzle();
+  async function leavePuzzleOk() {
+    if (!puzzle || puzzle.over || puzzle.practice || !puzzle.t0) return true;
+    return confirmBox('Leave the puzzle?', 'You can come back to it today, but the clock keeps running from when you first opened it, and your slips are kept.');
+  }
+  $('puzzleExit').onclick = async () => { if (await leavePuzzleOk()) newGame(); };
+  $('puzzleShareBtn').onclick = async () => {
+    const txt = $('puzzleShare').textContent;
+    try { if (navigator.share && matchMedia('(pointer: coarse)').matches) { await navigator.share({ text: txt }); return; } } catch (e) { /* fall back to copying */ }
+    try { await navigator.clipboard.writeText(txt); toast('Result copied. Paste it anywhere.'); } catch (e) { toast('Select the text above to copy it.'); }
+  };
+  $('puzzleNameBtn').onclick = async () => { $('puzzleOverlay').hidden = true; await askName(); toast('Named! Your times count from tomorrow’s puzzle.', 4000); };
+  updatePuzzleDot();
+  setInterval(updatePuzzleDot, 60000);
+
   /* Escape closes whatever dialog is open */
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
     if (!$('nameOverlay').hidden) $('nameCancel').click();
+    else if (!$('puzzleOverlay').hidden) $('puzzleOverlay').hidden = true;
     else if (!$('confirmOverlay').hidden) $('confirmNo').click();
     else if (!$('helpOverlay').hidden) $('helpClose').click();
     else if (!$('reportOverlay').hidden) $('reportClose').click();
@@ -1162,7 +1447,7 @@
      asks the site which version is live. If it's newer, a bar offers a reload, but only between games, never mid-move. */
   const myVersion = (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '';
   let newerVersion = null, updateDismissed = false, lastCheck = 0;
-  const midGame = () => !watching && ['player', 'engine', 'animating', 'intro'].includes(phase) && game.sanHistory.length > 0;
+  const midGame = () => (puzzle && !puzzle.over) || (!watching && ['player', 'engine', 'animating', 'intro'].includes(phase) && game.sanHistory.length > 0);
   function offerUpdate() {
     if (!newerVersion || updateDismissed || midGame()) return;
     $('updateBar').hidden = false;
