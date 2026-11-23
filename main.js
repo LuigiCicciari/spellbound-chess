@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=1.1.2');
+    worker = new Worker('engine.worker.js?v=1.1.3');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -375,7 +375,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.1.2',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.1.3',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -1434,10 +1434,62 @@
   updatePuzzleDot();
   setInterval(updatePuzzleDot, 60000);
 
+  /* ---------- feedback box (v1.1.3) ----------
+     One box, one optional name, sent to a private table with the device and what the player was doing, so a report
+     can be matched to its situation. Opened from How to play and the game and puzzle result cards; never pops up. */
+  let fbWhere = 'help';
+  function deviceSummary() {
+    const ua = navigator.userAgent || '';
+    const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'iPad'
+      : /Android/.test(ua) ? (/Mobile/.test(ua) ? 'Android phone' : 'Android tablet') : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'other';
+    const br = /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'other';
+    return `${os} · ${br}`;
+  }
+  function feedbackContext() {
+    let embedded = false; try { embedded = window.top !== window.self; } catch (e) { embedded = true; }
+    return {
+      device: deviceSummary(), ua: (navigator.userAgent || '').slice(0, 220),
+      screen: `${screen.width}x${screen.height}`, viewport: `${innerWidth}x${innerHeight}`,
+      landscape: innerWidth > innerHeight, touch: matchMedia('(pointer: coarse)').matches, embedded,
+      board: R.is3D ? '3d' : 'flat', flatWhy: flatWhy || null, standalone: matchMedia('(display-mode: standalone)').matches,
+      mode, level: settings.level, phase, moves: game.sanHistory.length, watching, puzzleDay: puzzle ? puzzle.day : null,
+      rated: !!profile.handle,
+    };
+  }
+  function openFeedback(where) {
+    fbWhere = where;
+    $('fbError').textContent = '';
+    if (!$('fbName').value && profile.handle) $('fbName').value = profile.handle;
+    $('fbOverlay').hidden = false;
+    setTimeout(() => $('fbText').focus(), 50);
+  }
+  function closeFeedback() { $('fbOverlay').hidden = true; }
+  $('fbFromHelp').onclick = () => openFeedback('help');
+  $('fbFromGame').onclick = () => openFeedback('game');
+  $('fbFromPuzzle').onclick = () => openFeedback('puzzle');
+  $('fbCancel').onclick = closeFeedback;
+  $('fbForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const message = $('fbText').value.trim();
+    if (message.length < 2) { $('fbError').textContent = 'Please write a few words.'; return; }
+    let cid = store.get('spellbound.fbid', '');
+    if (!cid) { cid = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join(''); store.set('spellbound.fbid', cid); }
+    $('fbSend').disabled = true; $('fbSend').textContent = 'Sending…';
+    const r = await window.SBLadder.feedback({ p_message: message, p_name: $('fbName').value.trim() || null, p_client_id: cid,
+      p_player_id: profile.handle ? profile.player_id : null, p_where: fbWhere, p_app_version: myVersionText(), p_context: feedbackContext() });
+    $('fbSend').disabled = false; $('fbSend').textContent = 'Send';
+    if (r.error) { $('fbError').textContent = `Couldn't send: ${r.error}. Your message is still here, try again in a bit.`; return; }
+    $('fbText').value = '';
+    closeFeedback();
+    toast('Thanks! Your feedback was sent.', 3500);
+  });
+  function myVersionText() { return (window.SB_CONFIG && window.SB_CONFIG.appVersion) || ''; }
+
   /* Escape closes whatever dialog is open */
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    if (!$('nameOverlay').hidden) $('nameCancel').click();
+    if (!$('fbOverlay').hidden) closeFeedback();
+    else if (!$('nameOverlay').hidden) $('nameCancel').click();
     else if (!$('puzzleOverlay').hidden) $('puzzleOverlay').hidden = true;
     else if (!$('confirmOverlay').hidden) $('confirmNo').click();
     else if (!$('helpOverlay').hidden) $('helpClose').click();

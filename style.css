@@ -337,11 +337,9 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
 .ladder .tabs { flex-wrap: wrap; }
 .ladder .tabs .tab { white-space: nowrap; }
 
-/* ---------- short screens (v1.1.2): pop-ups never run off the screen; they scroll instead ---------- */
-@media (max-height: 700px) {
-  .overlay { padding: 8px 0; }
-  .dialog { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; }
-}
+/* ---------- pop-ups never run off the screen; one taller than the screen scrolls instead (v1.1.2, all sizes v1.1.3) ---------- */
+.overlay { padding: 8px 0; }
+.dialog { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; box-sizing: border-box; }
 
 /* ---------- phone held sideways (v1.1.2) ----------
    Only short touch screens wider than they are tall: never the Tableau dashboard (926 px tall), Tableau's phone
@@ -387,3 +385,9 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
   .review-bar { left: 6px; right: 6px; top: 6px; padding: 4px 8px; font-size: 12px; gap: 6px; }
   .toast { bottom: 10px; max-width: 80vw; text-align: center; }
 }
+
+/* feedback box (v1.1.3) */
+.fb-line { margin: 10px 0 0; }
+.dialog textarea { width: 100%; box-sizing: border-box; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: 15px var(--sans); color: var(--text); resize: vertical; margin: 6px 0 10px; }
+#fbForm .small { display: block; }
+#fbForm input { margin: 6px 0 4px; }

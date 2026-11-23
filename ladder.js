@@ -254,7 +254,16 @@
     } catch (e) { return null; }
   }
 
-  const api = { verify, compute, preview, board, levelBoard, save, rename, puzzleStart, puzzleFinish, puzzleBoard, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
+  /* ---------- feedback (v1.1.3): private, write-only; read in Supabase's Table Editor ---------- */
+  async function feedback(body) {
+    if (!live()) return { error: "the leaderboard isn't connected, so feedback can't be sent from here" };
+    try {
+      await rest('rpc/submit_feedback', { method: 'POST', body: JSON.stringify(body) });
+      return { ok: true };
+    } catch (e) { return { error: e.message || 'network error' }; }
+  }
+
+  const api = { verify, compute, preview, board, levelBoard, save, rename, feedback, puzzleStart, puzzleFinish, puzzleBoard, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SBLadder = api;
 })(typeof window !== 'undefined' ? window : this);
