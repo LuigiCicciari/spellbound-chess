@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=1.0.0');
+    worker = new Worker('engine.worker.js?v=1.0.1');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -274,6 +274,10 @@
 
   async function endGame(result, reason) {
     if (phase === 'over') return;                       // a game ends once (e.g. flag while a dialog was open)
+    { // resigning (or flagging) while the last move was still animating: if that move already ended the game, it counts
+      const st = game.status();
+      if (st && st.over && reason !== st.reason) { result = st.result; reason = st.reason; }
+    }
     const wasRated = rated();                           // decided now: the mode switch can't change a finished game
     const endToken = gameToken;                         // if a new game starts during the ending, the pending record saves this one
     phase = 'over'; selected = null; updateButtons(); clockStop(null, false);
@@ -349,7 +353,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.0.0',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.0.1',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -369,6 +373,7 @@
     clearPending();
     if (!window.SBLadder.verify(rec)) return;
     const r = await window.SBLadder.save(rec, profile.secret);
+    if (r.error && r.transient && !store.get(PENDING, null)) store.set(PENDING, rec);   // keep it for the next visit
     if (!r.error) { toast(rec.termination === 'resign' ? 'Your unfinished game was counted as a resignation.' : 'Your last game has been saved to the leaderboard.', 4000); refreshLadder(); }
   }
 
@@ -383,7 +388,12 @@
     const before = myStats().rating;
     saveInFlight = true;
     const r = await window.SBLadder.save(rec, profile.secret).finally(() => { saveInFlight = false; });
-    if (r.error) { if (!/busy|network|fetch|timed? ?out|5\d\d/i.test(r.error)) clearPending(); savedThisGame = false; $('saveBtn').disabled = false; $('saveBtn').textContent = 'Try again'; $('saveNote').textContent = `Not saved: ${r.error}.`; return; }
+    if (r.error) {
+      if (!r.transient) clearPending();             // a refusal is final; a server or network hiccup is sent again next visit
+      savedThisGame = false; $('saveBtn').disabled = false; $('saveBtn').textContent = 'Try again';
+      $('saveNote').textContent = r.transient ? "Couldn't reach the leaderboard. Try again, or it will be sent on your next visit." : `Not saved: ${r.error}.`;
+      return;
+    }
     clearPending();                                  // saved: nothing left to send later
     await refreshLadder();
     const after = myStats().rating;
@@ -437,10 +447,7 @@
     const token = gameToken;
     if (options[0].promotion) { promotion = await pickPromotion(); if (!promotion) { if (phase === 'player') clearSelection(); return true; } }
     if (token !== gameToken || phase !== 'player') return true;
-    if (mode === 'casual' && settings.danger && stalematesWhileAhead({ from, to, promotion })) {
-      const ok = await confirmBox('That move is stalemate', "The stones would have no legal move and aren't in check, so the game ends in a draw, even though you're ahead. Leave their king a square to move to and go for checkmate instead. Play it anyway?");
-      if (!ok || token !== gameToken || phase !== 'player') { if (phase === 'player') clearSelection(); return true; }
-    }
+    if (!(await stalemateOk({ from, to, promotion }, token))) { if (phase === 'player') clearSelection(); return true; }
     await playMove({ from, to, promotion });
     return true;
   }
@@ -449,10 +456,17 @@
   function material(color) { let n = 0; for (const p of game.board) if (p && colorOf(p) === color && typeOf(p) !== 'K') n += PVAL[typeOf(p)]; return n; }
   function stalematesWhileAhead(spec) {
     const me = playerColor, them = me === 'w' ? 'b' : 'w';
-    const ahead = material(me) > material(them);
     const p = game.move(spec); if (!p) return false;
-    const st = game.status(); game.undo();
+    const st = game.status();
+    const ahead = material(me) > material(them);      // counted after the move, so a capture into stalemate counts
+    game.undo();
     return ahead && !!st && st.reason === 'stalemate';
+  }
+  /* Casual + Danger: warn before a stalemating move. Resolves false if the player backs out (or the game moved on). */
+  async function stalemateOk(spec, token) {
+    if (!(mode === 'casual' && settings.danger && stalematesWhileAhead(spec))) return true;
+    const ok = await confirmBox('That move is stalemate', "The stones would have no legal move and aren't in check, so the game ends in a draw, even though you're ahead. Leave their king a square to move to and go for checkmate instead. Play it anyway?");
+    return ok && token === gameToken && phase === 'player';
   }
 
   function pickPromotion() {
@@ -552,7 +566,9 @@
     if (!probe) { toast(`"${txt}" isn't a legal move here.`); return; }
     game.undo();
     inp.value = '';
-    await playMove({ from: probe.from, to: probe.to, promotion: probe.promotion });
+    const spec = { from: probe.from, to: probe.to, promotion: probe.promotion };
+    if (!(await stalemateOk(spec, gameToken))) return;
+    await playMove(spec);
   });
 
   /* ---------- buttons ---------- */

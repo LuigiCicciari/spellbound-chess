@@ -387,17 +387,22 @@ const reply = (status: number, body: unknown) => new Response(JSON.stringify(bod
 // The publishable key the game uses; requests without it are turned away. (Set it as a secret if you rotate it.)
 const PUBLIC_KEY = Deno.env.get('SPELLBOUND_PUBLIC_KEY') || 'sb_publishable_zT-gV7iMkd6PRbAbU0WGGA_MJBMTk5K';
 const DECIDED = { checkmate: true, stalemate: true, threefold: true, fifty_move: true, insufficient: true } as Record<string, boolean>;
+const FIELDS = ['p_player_id', 'p_secret', 'p_handle', 'p_level', 'p_player_color', 'p_result', 'p_termination',
+  'p_ply_count', 'p_pgn', 'p_start_rating', 'p_clock', 'p_app_version'];
+const MAX_BODY = 16000;
 
 function check(b: any): string | null {
   if (!b || typeof b.p_pgn !== 'string' || b.p_pgn.length > 10000) return 'missing moves';
   if (b.p_player_color !== 'w' && b.p_player_color !== 'b') return 'bad colour';
+  const plies = Number(b.p_ply_count);
+  if (!Number.isInteger(plies) || plies < 1 || plies > 600) return 'bad move count';
   const g = new Game();
   const tokens = b.p_pgn.replace(/\{[^}]*\}/g, ' ').split(/\s+/)
     .filter((t: string) => t && !/^\d+\.+$/.test(t) && !/^(1-0|0-1|1\/2-1\/2|\*)$/.test(t));
+  if (tokens.length !== plies) return 'move count does not match';
   for (const raw of tokens) {
     if (!g.move(raw.replace(/^\d+\.+/, ''))) return 'illegal move: ' + raw.slice(0, 12);
   }
-  if (tokens.length !== Number(b.p_ply_count)) return 'move count does not match';
   const st = g.status();                       // { over, result: '1-0' | '0-1' | '1/2-1/2', reason } or null
   const term = String(b.p_termination || '');
   if (DECIDED[term]) {
@@ -407,8 +412,32 @@ function check(b: any): string | null {
     if (b.p_result !== want) return 'the result does not match the final position';
   } else if (st) {
     return 'the game was already over';        // resign / timeout / agreed draw can't come after the end
+  } else if (term === 'resign') {
+    if (b.p_result !== 'L') return 'only the player can resign';
+  } else if (term === 'draw_agreed') {
+    if (b.p_result !== 'D') return 'an agreed draw is a draw';
+  } else if (term === 'timeout') {
+    // only the player's clock can run out (the stones move in about a second): a loss, or a draw when the
+    // player was the side to move and the stones have nothing left to mate with
+    if (!b.p_clock) return 'no clock, no timeout';
+    const other = b.p_player_color === 'w' ? 'b' : 'w';
+    const drawOk = b.p_result === 'D' && g.turn === b.p_player_color && !g.canMate(other);
+    if (b.p_result !== 'L' && !drawOk) return 'that time-out result is not possible';
+  } else {
+    return 'unknown ending';
   }
   return null;
+}
+
+/* The server-only key Supabase gives every Edge Function: a new-style secret key if the project has one,
+   otherwise the legacy service_role key. */
+function serverKey(): string | null {
+  try {
+    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}');
+    const k = keys.default || Object.values(keys)[0];
+    if (typeof k === 'string' && k) return k;
+  } catch { /* not set */ }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || null;
 }
 
 Deno.serve(async (req) => {
@@ -416,17 +445,32 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return reply(405, { message: 'POST only' });
   if ((req.headers.get('apikey') || '') !== PUBLIC_KEY) return reply(401, { message: 'unknown client' });
   let body: any;
-  try { body = await req.json(); } catch { return reply(400, { message: 'bad request' }); }
+  try {
+    const raw = await req.text();
+    if (raw.length > MAX_BODY) return reply(413, { message: 'Game not accepted: too long' });
+    body = JSON.parse(raw);
+  } catch { return reply(400, { message: 'bad request' }); }
   const problem = check(body);
   if (problem) return reply(400, { message: 'Game not accepted: ' + problem });
+  const clean: Record<string, unknown> = {};
+  for (const k of FIELDS) clean[k] = body[k] ?? null;   // only the fields submit_game takes
 
   const url = Deno.env.get('SUPABASE_URL')!;
-  const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const res = await fetch(`${url}/rest/v1/rpc/submit_game`, {
-    method: 'POST',
-    headers: { apikey: service, Authorization: `Bearer ${service}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const service = serverKey();
+  if (!service) return reply(500, { message: 'server key missing' });
+  // new-style secret keys (sb_secret_...) go in the apikey header only; legacy service_role keys are JWTs
+  const headers: Record<string, string> = { apikey: service, 'Content-Type': 'application/json' };
+  if (service.startsWith('eyJ')) headers.Authorization = `Bearer ${service}`;
+  // the same game sent twice within 15 min (a retry after a lost reply): answer with the saved result, don't save it again.
+  // (Short window, so two genuinely identical quick games far apart both count.)
+  try {
+    const q = `${url}/rest/v1/games?select=rating_before,rating_after&player_id=eq.${encodeURIComponent(String(clean.p_player_id))}` +
+      `&pgn=eq.${encodeURIComponent(String(clean.p_pgn))}&termination=eq.${encodeURIComponent(String(clean.p_termination))}` +
+      `&created_at=gt.${encodeURIComponent(new Date(Date.now() - 15 * 60000).toISOString())}&limit=1`;
+    const dup = await fetch(q, { headers });
+    if (dup.ok) { const rows = await dup.json(); if (rows.length) return reply(200, { ...rows[0], duplicate: true }); }
+  } catch { /* no duplicate check: save normally */ }
+  const res = await fetch(`${url}/rest/v1/rpc/submit_game`, { method: 'POST', headers, body: JSON.stringify(clean) });
   const text = await res.text();
   return new Response(text, { status: res.status, headers: { ...cors, 'Content-Type': 'application/json' } });
 });

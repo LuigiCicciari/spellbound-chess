@@ -127,7 +127,8 @@
         const top = await rest(`players?select=${cols}&games=gte.${PROVISIONAL}${vis}&order=rating.desc,games.desc&limit=10`, { count: true, headers: { Prefer: 'count=exact' } });
         const meRows = await rest(`players?select=${cols}&player_id=eq.${encodeURIComponent(playerId)}`);
         const today = await rest('today_board?select=player_id,handle,gain,games&order=gain.desc&limit=10');
-        const hist = await rest(`games?select=created_at,level,player_color,result,rating_before,rating_after&player_id=eq.${encodeURIComponent(playerId)}&order=created_at.asc&limit=500`);
+        const hist = await rest(`games?select=created_at,level,player_color,result,rating_before,rating_after&player_id=eq.${encodeURIComponent(playerId)}&order=created_at.desc&limit=500`);
+        hist.reverse();                                  // newest 500, oldest first
         const m = meRows[0] || null;
         let me = null;
         if (m) {
@@ -194,7 +195,8 @@
   async function save(record, secret) {
     const local = store.get(LS_KEY, []);
     record.created_at = record.created_at || new Date().toISOString();
-    local.push(record); store.set(LS_KEY, local);
+    // "Try again" sends the same game again: keep one local copy of it
+    if (!local.some((g) => g.player_id === record.player_id && g.pgn === record.pgn && g.termination === record.termination)) { local.push(record); store.set(LS_KEY, local); }
     if (!live()) { mode = 'local'; return { mode }; }
     try {
       const body = JSON.stringify({
@@ -210,9 +212,10 @@
       mode = 'live';
       return { mode, before: r && r.rating_before, after: r && r.rating_after };
     } catch (e) {
-      // a refused save (wrong secret, rate limit, bad game) stays refused; a network failure falls back to local
+      // a refused save (wrong secret, rate limit, bad game) stays refused; a server error or network failure is
+      // reported as transient so the game is kept and sent again (the server ignores a game it already has)
       if (e.status && e.status < 500) return { mode: 'live', error: e.message };
-      mode = 'local'; return { mode };
+      return { mode: 'live', error: e.message || 'network error', transient: true };
     }
   }
 
