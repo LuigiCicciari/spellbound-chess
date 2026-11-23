@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=0.9.1');
+    worker = new Worker('engine.worker.js?v=0.9.2');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -281,7 +281,7 @@
       if (wasRated && !unrated && !watching && profile.handle && profile.start && game.sanHistory.length >= 2) store.set(PENDING, recordFor(res, reason));
       else clearPending();
     }
-    updateMode();
+    updateMode(); setTimeout(() => offerUpdate(), 2500);
     if (promoResolve) promoResolve(null);
     if (confirmResolve) confirmResolve(false);
     R.setThinking('w', false); R.setThinking('b', false);
@@ -346,7 +346,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.9.1',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '0.9.2',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -1102,6 +1102,31 @@
 
   /* ---------- start ---------- */
   applySound();
+
+  /* ---------- new version check ----------
+     Visitors often leave the game open for hours. Every 10 minutes (and when the tab comes back into view) the page
+     asks the site which version is live. If it's newer, a bar offers a reload, but only between games, never mid-move. */
+  const myVersion = (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '';
+  let newerVersion = null, updateDismissed = false, lastCheck = 0;
+  const midGame = () => !watching && ['player', 'engine', 'animating', 'intro'].includes(phase) && game.sanHistory.length > 0;
+  function offerUpdate() {
+    if (!newerVersion || updateDismissed || midGame()) return;
+    $('updateBar').hidden = false;
+  }
+  async function checkVersion() {
+    if (!myVersion || Date.now() - lastCheck < 60000) return;
+    lastCheck = Date.now();
+    try {
+      const txt = await fetch(`config.js?check=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : ''));
+      const live = (/appVersion:\s*'([^']+)'/.exec(txt) || [])[1];
+      if (live && live !== myVersion) { newerVersion = live; offerUpdate(); }
+    } catch (e) { /* offline: try again later */ }
+  }
+  $('updateBtn').onclick = () => location.reload();
+  $('updateLater').onclick = () => { updateDismissed = true; $('updateBar').hidden = true; };
+  setTimeout(checkVersion, 30000);
+  setInterval(checkVersion, 10 * 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
   if (!R.is3D && flatWhy) setTimeout(() => toast(`Showing the flat board: ${flatWhy}.`, 7000), 1200); // says why, so it can be fixed
   if (!settings.seenHelp) $('helpOverlay').hidden = false;
   refreshLadder().then(flushPending);

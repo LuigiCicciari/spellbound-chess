@@ -301,3 +301,7 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
   .toast { bottom: 16px; max-width: 92vw; text-align: center; }
 }
 @media (pointer: coarse) { .btn, .mode-btn { min-height: 40px; } }
+
+/* new version available */
+.update-bar { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); z-index: 30; display: flex; align-items: center; gap: 10px;
+  background: var(--panel-2); border: 1px solid var(--rune-w); border-radius: 10px; padding: 8px 12px; font-size: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.45); max-width: 94vw; flex-wrap: wrap; }
