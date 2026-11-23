@@ -27,6 +27,8 @@ Built to be shown on Tableau Public through a Web Page object, with the game hos
 - You pick the name that shows on the leaderboard and can change it with the ✎ button, which also shows a recovery code for using your rating on another device
 - Works on phones: the board fills the screen width, the controls sit right under it, and the battle report opens full screen. In Tableau, add a Phone device layout holding the same Web Page object.
 - Respects your system's reduced-motion setting
+- **Phones:** upright, the board sits on top with the controls below; held sideways, the board fills the left at full height and the controls and leaderboard scroll on the right. Pop-ups scroll on short screens. The screen stays awake while a game or puzzle is being played
+- **Add to Home Screen** (phone browser menu) gives an app icon and opens full screen. On iPhone, a home-screen app keeps its own storage separate from Safari, so use the recovery code in the ✎ name dialog to bring your rating across
 - 🧩 **Daily puzzle**: one position a day, the same for everyone (new at midnight UTC). The stones play their move, you find the winning line; a wrong move is a slip and you try again, and any move that gives checkmate counts. Mondays are easiest and Sundays hardest. You get your time, slips, a day streak and a result to share; named players appear on the PUZZLE leaderboard tab (first-try solves first, then fastest). The puzzle server checks the line and the database keeps the time from when the puzzle first opens (a solve under 3 seconds is refused), so a time can't simply be typed in. Slips are counted by the browser, and a determined cheater could still read the answer: the board is for fun, not proof
 
 ## Online leaderboard (optional)
@@ -57,6 +59,7 @@ Each browser also replays its games' moves and refuses to submit any that are il
 | `ladder.js` | Saving games, verification, Elo, and the leaderboard |
 | `main.js` | Game flow and controls |
 | `config.js` | Supabase settings (empty = local mode) |
+| `manifest.webmanifest`, `icons/` | Add to Home Screen: app name, colours and the original rook-and-rune icon |
 | `puzzles.json` | The daily puzzles: 1,092 days (156 weeks, to 18 Nov 2029, no repeats) from the [Lichess puzzle database](https://database.lichess.org/#puzzles) (public domain, CC0), rated 1000–1650, popularity 90+, 2,000+ plays, one per source game, each checked with the game's own rules. Day 1 = 23 Nov 2026 (UTC); the list repeats after the last day. Adding puzzles to the end never changes earlier days |
 | `supabase/functions/` | Server-side checks: `submit-game` (replays rated games) and `puzzle` (checks puzzle solutions; the database times them) |
 | `supabase-update-v1.0.sql`, `-v1.1.sql` | v1.0: only the Edge Function can save games. v1.1: puzzle results table, leaderboard view and streaks. v1.1.1: 3-second floor on solved times; hidden players left out of puzzle history |

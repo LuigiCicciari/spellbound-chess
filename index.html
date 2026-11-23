@@ -3,12 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1B1C22">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Spellbound">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <title>Spellbound Chess</title>
   <meta name="description" content="Play chess against living stone pieces. Earn an Elo rating and climb the leaderboard.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1.1.1">
+  <link rel="stylesheet" href="style.css?v=1.1.2">
 </head>
 <body>
   <div class="app" id="app">
@@ -27,7 +35,7 @@
           <span id="puzzleText" aria-live="polite"></span>
           <span class="puzzle-timer" id="puzzleTimer">0:00</span>
           <div class="review-buttons">
-            <button class="btn" id="puzzleGiveUp">Show solution</button>
+            <button class="btn" id="puzzleGiveUp"><span class="pz-long">Show </span>solution</button>
             <button class="btn" id="puzzleExit">Exit</button>
           </div>
         </div>
@@ -276,21 +284,21 @@
   <div class="toast" id="toast" role="status" hidden></div>
   <div class="update-bar" id="updateBar" role="status" hidden>A new version of Spellbound Chess is ready. <button class="btn primary" id="updateBtn">Reload</button><button class="btn" id="updateLater" aria-label="Not now">Later</button></div>
 
-  <script src="config.js?v=1.1.1"></script>
-  <script src="rules.js?v=1.1.1"></script>
-  <script src="openings.js?v=1.1.1"></script>
-  <script src="engine.js?v=1.1.1"></script>
-  <script src="audio.js?v=1.1.1"></script>
-  <script src="render.js?v=1.1.1"></script>
-  <script src="ladder.js?v=1.1.1"></script>
-  <script src="sf.js?v=1.1.1"></script>
+  <script src="config.js?v=1.1.2"></script>
+  <script src="rules.js?v=1.1.2"></script>
+  <script src="openings.js?v=1.1.2"></script>
+  <script src="engine.js?v=1.1.2"></script>
+  <script src="audio.js?v=1.1.2"></script>
+  <script src="render.js?v=1.1.2"></script>
+  <script src="ladder.js?v=1.1.2"></script>
+  <script src="sf.js?v=1.1.2"></script>
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
   <script type="module">
     // Load the 3D board if the browser can; otherwise the flat board is used.
     try {
-      await Promise.race([import('./render3d.js?v=1.1.1'), new Promise((_, no) => setTimeout(() => no(new Error('the 3D files took too long to load')), 15000))]);
+      await Promise.race([import('./render3d.js?v=1.1.2'), new Promise((_, no) => setTimeout(() => no(new Error('the 3D files took too long to load')), 15000))]);
     } catch (e) { window.SB3DError = (e && e.message) || String(e); console.warn('Spellbound Chess: 3D board unavailable, using the flat board.', e); }
-    const s = document.createElement('script'); s.src = 'main.js?v=1.1.1'; document.body.appendChild(s);
+    const s = document.createElement('script'); s.src = 'main.js?v=1.1.2'; document.body.appendChild(s);
   </script>
 </body>
 </html>

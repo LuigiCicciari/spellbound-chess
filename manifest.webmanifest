@@ -1,0 +1,16 @@
+{
+  "name": "Spellbound Chess",
+  "short_name": "Spellbound",
+  "description": "Animated stone-warrior chess against the computer, with a daily puzzle and a leaderboard.",
+  "start_url": "./?source=homescreen",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1B1C22",
+  "theme_color": "#1B1C22",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

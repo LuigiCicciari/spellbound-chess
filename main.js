@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=1.1.1');
+    worker = new Worker('engine.worker.js?v=1.1.2');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -186,7 +186,22 @@
     $('casualRow').hidden = mode !== 'casual';
     $('dangerBtn').setAttribute('aria-pressed', String(!!settings.danger));
   }
+  let wakeLock = null, wakeBusy = false;
+  async function syncWake() {
+    const want = document.visibilityState === 'visible' &&
+      ((puzzle && !puzzle.over) || (!watching && ['player', 'engine', 'animating'].includes(phase) && game.sanHistory.length > 0));
+    if (wakeBusy || !navigator.wakeLock || want === !!wakeLock) return;
+    wakeBusy = true;
+    try {
+      if (want) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+      else { const l = wakeLock; wakeLock = null; await l.release(); }
+    } catch (e) { wakeLock = null; /* not allowed here (e.g. inside an iframe without permission): the screen just dims as usual */ }
+    wakeBusy = false;
+  }
+  document.addEventListener('visibilitychange', () => syncWake());
+
   function updateButtons() {
+    syncWake();
     const casualTurn = mode === 'casual' && !watching && phase === 'player' && !puzzle;
     $('takebackBtn').disabled = !casualTurn || game.sanHistory.length < (playerColor === 'w' ? 2 : 3);
     $('sfHintBtn').disabled = !casualTurn;
@@ -360,7 +375,7 @@
     return {
       player_id: profile.player_id, handle: profile.handle, level, engine_elo: LEVELS[level].elo, player_color: playerColor,
       result: res, termination: reason, ply_count: game.sanHistory.length, pgn: game.pgn(),
-      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.1.1',
+      app_version: (window.SB_CONFIG && window.SB_CONFIG.appVersion) || '1.1.2',
       start_rating: profile.start || null, clock: clock ? settings.clock : null,
     };
   }
@@ -1182,6 +1197,9 @@
     if (!puzzle) return;
     clearInterval(puzzleTimer); puzzleTimer = null;
     puzzle = null; $('puzzleBar').hidden = true; $('puzzleOverlay').hidden = true;
+    document.body.classList.remove('puzzling');
+    syncWake();
+    setTimeout(() => offerUpdate(), 2500);
   }
 
   async function openPuzzle(practice) {
@@ -1228,6 +1246,7 @@
     const who = playerColor === 'w' ? 'White (Moonstone)' : 'Black (Obsidian)';
     $('puzzleText').textContent = `🧩 Puzzle #${day} · ${practice ? 'practice' : 'rated ' + e.rating}`;
     $('puzzleTimer').textContent = '0:00'; $('puzzleBar').hidden = false;
+    document.body.classList.add('puzzling');
     R.setOrientation(playerColor, game.board);
     syncBoard();
     phase = 'animating'; updateButtons();
@@ -1350,6 +1369,8 @@
     await wait(solved ? 700 : 300);
     if (puzzle !== p) return;
     showPuzzleResult(day, p.e, rec, false, note, p.practice);
+    syncWake();
+    setTimeout(() => offerUpdate(), 2500);              // a new version can load now, between puzzle and next game
   }
 
   function shareText(day, rec) {

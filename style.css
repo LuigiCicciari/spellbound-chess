@@ -336,3 +336,54 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
 .ladder .card-head { flex-wrap: wrap; row-gap: 4px; }
 .ladder .tabs { flex-wrap: wrap; }
 .ladder .tabs .tab { white-space: nowrap; }
+
+/* ---------- short screens (v1.1.2): pop-ups never run off the screen; they scroll instead ---------- */
+@media (max-height: 700px) {
+  .overlay { padding: 8px 0; }
+  .dialog { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; }
+}
+
+/* ---------- phone held sideways (v1.1.2) ----------
+   Only short touch screens wider than they are tall: never the Tableau dashboard (926 px tall), Tableau's phone
+   layout (a 1,300 px tall frame), desktops (mouse) or tablets (taller than 500 px). Board on the left at the full
+   screen height, everything else in a column on the right that scrolls on its own. */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  body { --hdr: 38px; --stat: 24px; --bar: 0px;
+         --bsize: calc(100vh - var(--hdr) - var(--stat) - var(--bar) - 14px); --bw: var(--bsize); }
+  @supports (height: 100dvh) { body { --bsize: calc(100dvh - var(--hdr) - var(--stat) - var(--bar) - 14px); } }
+  body.puzzling { --bar: 34px; }
+  body.is3d { --bw: min(calc(var(--bsize) * 1.3), 58vw); }
+  .app { height: 100vh; height: 100dvh; min-height: 0; grid-template-rows: var(--hdr) minmax(0, 1fr); overflow: hidden; }
+  .foot { display: none; }
+  .top { height: var(--hdr); min-height: 0; padding: 0 10px; }
+  .top h1 { font-size: 15px; letter-spacing: .06em; }
+  .top .btn-label { display: none; }
+  .icon-btn { min-height: 30px; min-width: 36px; padding: 2px 8px; font-size: 15px; }
+  .stage, body.is3d .stage { grid-template-columns: auto minmax(0, 1fr) !important; padding: 6px !important; gap: 10px !important; height: 100%; min-height: 0; overflow: hidden; }
+  .board-col { position: relative; height: 100%; min-height: 0; justify-content: flex-start; }
+  .board-wrap, body.is3d .board-wrap { width: var(--bw); height: var(--bsize); aspect-ratio: auto; flex: none; }
+  .puzzle-bar { width: var(--bw); height: 30px; margin: 0 0 4px; padding: 2px 8px; gap: 6px; font-size: 12px; }
+  .puzzle-bar .btn { min-height: 0; padding: 2px 7px; font-size: 12px; }
+  .puzzle-bar #puzzleText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 0; }
+  .puzzle-bar .review-buttons { flex: none; gap: 4px; }
+  .pz-long { display: none; }
+  #puzzleGiveUp { text-transform: capitalize; }
+  .tray, body.is3d .tray { position: absolute; left: 10px; width: auto; height: 26px; z-index: 2; background: rgba(27,28,34,.55); border-radius: 8px; padding: 0 6px; }
+  .tray:empty { display: none; }
+  .tray svg { width: 22px; height: 22px; }
+  #trayTop, body.is3d #trayTop { top: calc(var(--bar) + 8px); }
+  #trayBottom, body.is3d #trayBottom { bottom: calc(var(--stat) + 8px); }
+  .statusline, body.is3d .statusline { width: var(--bw); height: var(--stat); padding: 2px 2px 0; font-size: 13px; }
+  #status { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .type-form { display: none; }
+  .clock-badge, body:not(.is3d) .clock-badge { font-size: 15px; padding: 3px 8px; right: 6px; }
+  .clock-badge.them, body:not(.is3d) .clock-badge.them { top: 6px; }
+  .clock-badge.me, body:not(.is3d) .clock-badge.me { bottom: 6px; }
+  .side { height: 100%; min-height: 0; overflow-y: auto; gap: 8px; padding-bottom: 10px; overscroll-behavior: contain; }
+  .side .controls { order: -1; }
+  .card { padding: 10px; }
+  .ladder-body { max-height: none; }
+  .btn, .mode-btn { min-height: 34px; }
+  .review-bar { left: 6px; right: 6px; top: 6px; padding: 4px 8px; font-size: 12px; gap: 6px; }
+  .toast { bottom: 10px; max-width: 80vw; text-align: center; }
+}
