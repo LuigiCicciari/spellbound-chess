@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=1.1.6');
+    worker = new Worker('engine.worker.js?v=1.1.7');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -90,7 +90,10 @@
   }
 
   /* ---------- opening book (optional file) ---------- */
-  fetch('opening_tree.json').then((r) => (r.ok ? r.json() : null)).then((j) => { book = j; updateHint(); }).catch(() => {});
+  // Opening explorer ("What real players did"): built for an optional opening_tree.json made from a Lichess games
+  // export. The data was never added, so the button stays hidden; v1.1.7 stops requesting the missing file.
+  // To turn it on: add opening_tree.json to the site and restore
+  //   fetch('opening_tree.json').then((r) => (r.ok ? r.json() : null)).then((j) => { book = j; updateHint(); }).catch(() => {});
 
   /* ---------- UI helpers ---------- */
   function toast(msg, ms) {

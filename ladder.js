@@ -206,9 +206,11 @@
         p_clock: record.clock, p_app_version: record.app_version,
       });
       // v1.0: games go through the submit-game Edge Function, which replays the moves before the database rates
-      // the game. Until that function is deployed (404), fall back to the database function directly.
-      let r = await callFunction('submit-game', body);
-      if (r === NOT_DEPLOYED) r = await rest('rpc/submit_game', { method: 'POST', body });
+      // the game. v1.1.7: no way around it any more. If the function answers 404 (missing or mid-redeploy), the game
+      // is kept and sent again on the next visit; the old direct database call is gone (browsers can't run it
+      // anyway since v1.0, and its permission error used to be taken as a final refusal, dropping the game).
+      const r = await callFunction('submit-game', body);
+      if (r === NOT_DEPLOYED) return { mode: 'live', error: 'the save service is unavailable right now', transient: true };
       mode = 'live';
       return { mode, before: r && r.rating_before, after: r && r.rating_after };
     } catch (e) {
