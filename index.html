@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1.1.4">
+  <link rel="stylesheet" href="style.css?v=1.1.5">
 </head>
 <body>
   <div class="app" id="app">
@@ -26,6 +26,7 @@
         <button class="icon-btn puzzle-btn" id="puzzleBtn" title="Today's puzzle: one position a day, the same for everyone" aria-label="Today's puzzle">🧩 <span class="btn-label">Daily puzzle</span><span class="puzzle-dot" id="puzzleDot" hidden></span></button>
         <button class="icon-btn" id="soundBtn" aria-pressed="true" title="Sound on/off" aria-label="Sound">♪ <span id="soundLabel" class="btn-label">Sound on</span></button>
         <button class="icon-btn" id="helpBtn" title="How to play" aria-label="How to play">? <span class="btn-label">How to play</span></button>
+        <button class="icon-btn side-toggle" id="sideToggle" title="Hide the side panel" aria-label="Hide the side panel" aria-pressed="false">⇥</button>
       </div>
     </header>
 
@@ -326,21 +327,21 @@
   <div class="toast" id="toast" role="status" hidden></div>
   <div class="update-bar" id="updateBar" role="status" hidden>A new version of Spellbound Chess is ready. <button class="btn primary" id="updateBtn">Reload</button><button class="btn" id="updateLater" aria-label="Not now">Later</button></div>
 
-  <script src="config.js?v=1.1.4"></script>
-  <script src="rules.js?v=1.1.4"></script>
-  <script src="openings.js?v=1.1.4"></script>
-  <script src="engine.js?v=1.1.4"></script>
-  <script src="audio.js?v=1.1.4"></script>
-  <script src="render.js?v=1.1.4"></script>
-  <script src="ladder.js?v=1.1.4"></script>
-  <script src="sf.js?v=1.1.4"></script>
+  <script src="config.js?v=1.1.5"></script>
+  <script src="rules.js?v=1.1.5"></script>
+  <script src="openings.js?v=1.1.5"></script>
+  <script src="engine.js?v=1.1.5"></script>
+  <script src="audio.js?v=1.1.5"></script>
+  <script src="render.js?v=1.1.5"></script>
+  <script src="ladder.js?v=1.1.5"></script>
+  <script src="sf.js?v=1.1.5"></script>
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
   <script type="module">
     // Load the 3D board if the browser can; otherwise the flat board is used.
     try {
-      await Promise.race([import('./render3d.js?v=1.1.4'), new Promise((_, no) => setTimeout(() => no(new Error('the 3D files took too long to load')), 15000))]);
+      await Promise.race([import('./render3d.js?v=1.1.5'), new Promise((_, no) => setTimeout(() => no(new Error('the 3D files took too long to load')), 15000))]);
     } catch (e) { window.SB3DError = (e && e.message) || String(e); console.warn('Spellbound Chess: 3D board unavailable, using the flat board.', e); }
-    const s = document.createElement('script'); s.src = 'main.js?v=1.1.4'; document.body.appendChild(s);
+    const s = document.createElement('script'); s.src = 'main.js?v=1.1.5'; document.body.appendChild(s);
   </script>
 </body>
 </html>

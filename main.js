@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=1.1.4');
+    worker = new Worker('engine.worker.js?v=1.1.5');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -700,6 +700,18 @@
     const d = document.querySelector('#helpOverlay .dialog'); if (d) d.scrollTop = 0;
   }
   $('helpBtn').onclick = () => showHelp(true);
+  /* v1.1.5: side panel can be folded away on a sideways phone (the button only shows there) */
+  const SIDE_KEY = 'spellbound.sideClosed';
+  function setSide(closed) {
+    document.body.classList.toggle('side-closed', closed);
+    const b = $('sideToggle'); if (!b) return;
+    b.textContent = closed ? '☰' : '⇥';
+    const t = closed ? 'Show the side panel' : 'Hide the side panel';
+    b.title = t; b.setAttribute('aria-label', t); b.setAttribute('aria-pressed', closed ? 'true' : 'false');
+    try { localStorage.setItem(SIDE_KEY, closed ? '1' : '0'); } catch (e) { /* storage blocked */ }
+  }
+  try { if (localStorage.getItem(SIDE_KEY) === '1') setSide(true); } catch (e) { /* storage blocked */ }
+  if ($('sideToggle')) $('sideToggle').onclick = () => setSide(!document.body.classList.contains('side-closed'));
   $('helpMore').onclick = () => showHelp(true);
   $('helpClose').onclick = () => { $('helpOverlay').hidden = true; settings.seenHelp = true; saveSettings(); window.SBAudio.unlock(); };
 

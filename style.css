@@ -341,24 +341,39 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
 .overlay { padding: 8px 0; }
 .dialog { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; box-sizing: border-box; }
 
-/* ---------- phone held sideways (v1.1.2) ----------
+/* ---------- phone held sideways (v1.1.2, reworked v1.1.5) ----------
    Only short touch screens wider than they are tall: never the Tableau dashboard (926 px tall), Tableau's phone
-   layout (a 1,300 px tall frame), desktops (mouse) or tablets (taller than 500 px). Board on the left at the full
-   screen height, everything else in a column on the right that scrolls on its own. */
+   layout (a 1,300 px tall frame), desktops (mouse) or tablets (taller than 500 px).
+   v1.1.5: the PAGE scrolls (Safari only hides its address bar and tab bar when the page itself scrolls; v1.1.2
+   locked the page, so the bars never went away). The board column sticks to the top-left at the full visible
+   height and grows when Safari's bars shrink; header and panel sit in a narrower right column that can be closed
+   to a slim rail (⇥ / ☰). */
+.side-toggle { display: none; }
 @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-  body { --hdr: 38px; --stat: 24px; --bar: 0px;
-         --bsize: calc(100vh - var(--hdr) - var(--stat) - var(--bar) - 14px); --bw: var(--bsize); }
-  @supports (height: 100dvh) { body { --bsize: calc(100dvh - var(--hdr) - var(--stat) - var(--bar) - 14px); } }
+  body { --stat: 24px; --bar: 0px; --sidew: clamp(250px, 34vw, 320px);
+         --bsize: calc(100vh - var(--stat) - var(--bar) - 12px); --bw: var(--bsize); }
+  @supports (height: 100dvh) { body { --bsize: calc(100dvh - var(--stat) - var(--bar) - 12px); } }
   body.puzzling { --bar: 34px; }
-  body.is3d { --bw: min(calc(var(--bsize) * 1.3), 58vw); }
-  .app { height: 100vh; height: 100dvh; min-height: 0; grid-template-rows: var(--hdr) minmax(0, 1fr); overflow: hidden; }
+  body.side-closed { --sidew: 46px; }
+  body.is3d { --bw: calc(100vw - var(--sidew) - 22px); }
+  .app { grid-template-columns: minmax(0, 1fr) var(--sidew); grid-template-rows: auto 1fr;
+         grid-template-areas: "board top" "board side"; column-gap: 10px; padding: 0 6px;
+         height: auto; min-height: calc(100vh + 70px); max-width: none; overflow: visible; }   /* always a little room to scroll, so Safari can tuck its bars away */
+  .stage, body.is3d .stage { display: contents; }
   .foot { display: none; }
-  .top { height: var(--hdr); min-height: 0; padding: 0 10px; }
-  .top h1 { font-size: 15px; letter-spacing: .06em; }
+  .board-col, body.is3d .board-col { grid-area: board; position: sticky; top: 0; align-self: start; height: 100vh; min-height: 0;
+               padding-top: 6px; box-sizing: border-box; justify-content: flex-start; align-items: center; }
+  @supports (height: 100dvh) { .board-col, body.is3d .board-col { height: 100dvh; } }
+  .top { grid-area: top; height: auto; min-height: 0; padding: 6px 0; gap: 6px; border-bottom: none; }
+  .top h1 { font-size: 12px; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .top-actions { gap: 5px; flex: none; }
   .top .btn-label { display: none; }
-  .icon-btn { min-height: 30px; min-width: 36px; padding: 2px 8px; font-size: 15px; }
-  .stage, body.is3d .stage { grid-template-columns: auto minmax(0, 1fr) !important; padding: 6px !important; gap: 10px !important; height: 100%; min-height: 0; overflow: hidden; }
-  .board-col { position: relative; height: 100%; min-height: 0; justify-content: flex-start; }
+  .icon-btn { min-height: 30px; min-width: 34px; padding: 2px 7px; font-size: 15px; }
+  .side-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  body.side-closed .top { position: sticky; top: 0; flex-direction: column; justify-content: flex-start; padding-top: 6px; }
+  body.side-closed .top h1 { display: none; }
+  body.side-closed .top-actions { flex-direction: column; }
+  body.side-closed .side { display: none; }
   .board-wrap, body.is3d .board-wrap { width: var(--bw); height: var(--bsize); aspect-ratio: auto; flex: none; }
   .puzzle-bar { width: var(--bw); height: 30px; margin: 0 0 4px; padding: 2px 8px; gap: 6px; font-size: 12px; }
   .puzzle-bar .btn { min-height: 0; padding: 2px 7px; font-size: 12px; }
@@ -369,7 +384,7 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
   .tray, body.is3d .tray { position: absolute; left: 10px; width: auto; height: 26px; z-index: 2; background: rgba(27,28,34,.55); border-radius: 8px; padding: 0 6px; }
   .tray:empty { display: none; }
   .tray svg { width: 22px; height: 22px; }
-  #trayTop, body.is3d #trayTop { top: calc(var(--bar) + 8px); }
+  #trayTop, body.is3d #trayTop { top: calc(var(--bar) + 12px); }
   #trayBottom, body.is3d #trayBottom { bottom: calc(var(--stat) + 8px); }
   .statusline, body.is3d .statusline { width: var(--bw); height: var(--stat); padding: 2px 2px 0; font-size: 13px; }
   #status { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -377,7 +392,11 @@ a.btn { text-decoration: none; color: inherit; display: inline-flex; align-items
   .clock-badge, body:not(.is3d) .clock-badge { font-size: 15px; padding: 3px 8px; right: 6px; }
   .clock-badge.them, body:not(.is3d) .clock-badge.them { top: 6px; }
   .clock-badge.me, body:not(.is3d) .clock-badge.me { bottom: 6px; }
-  .side { height: 100%; min-height: 0; overflow-y: auto; gap: 8px; padding-bottom: 10px; overscroll-behavior: contain; }
+  .side { grid-area: side; height: auto; min-height: 0; overflow: visible; gap: 8px; padding-bottom: 14px; }
+  .side, .side > * { min-width: 0; }
+  .controls label { min-width: 0; }
+  .controls select { min-width: 0; width: 100%; }
+  .controls .row.buttons { flex-wrap: wrap; }
   .side .controls { order: -1; }
   .card { padding: 10px; }
   .ladder-body { max-height: none; }
