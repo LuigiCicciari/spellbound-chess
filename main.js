@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=1.1.5');
+    worker = new Worker('engine.worker.js?v=1.1.6');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -186,6 +186,11 @@
     $('casualRow').hidden = mode !== 'casual';
     $('dangerBtn').setAttribute('aria-pressed', String(!!settings.danger));
   }
+  /* v1.1.6: anonymous counts (GoatCounter: no cookies, no personal data). Event names only, never moves, names or IDs.
+     Fails silently when the counter is blocked or not loaded. */
+  function track(name) {
+    try { if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path: name, title: name, event: true }); } catch (e) { /* ad blocker etc. */ }
+  }
   let wakeLock = null, wakeBusy = false;
   async function syncWake() {
     const want = document.visibilityState === 'visible' &&
@@ -286,7 +291,7 @@
     lastMove = { from: played.from, to: played.to };
     syncBoard(false);
     if (puzzle) { await puzzleAfterMove(played, byPlayer, token); updateButtons(); return true; }
-    if (!watching) { notePending(); if (game.sanHistory.length <= 2) updateMode(); }
+    if (!watching) { notePending(); if (game.sanHistory.length <= 2) updateMode(); if (game.sanHistory.length === 1) track('game-start-' + (rated() ? 'rated' : 'casual')); }
     const moverName = colorOf(played.piece) === playerColor ? 'You' : 'Stones';
     const st = game.status();
     if (st) { await endGame(st.result, st.reason); return true; }
@@ -310,6 +315,7 @@
       if (st && st.over && reason !== st.reason) { result = st.result; reason = st.reason; }
     }
     const wasRated = rated();                           // decided now: the mode switch can't change a finished game
+    if (!watching) track('game-end-' + (wasRated ? 'rated' : 'casual'));
     const endToken = gameToken;                         // if a new game starts during the ending, the pending record saves this one
     phase = 'over'; selected = null; updateButtons(); clockStop(null, false);
     {
@@ -639,6 +645,7 @@
     else toast('The stones refuse your draw: they think they are winning.');
   };
   function startWatch() {
+    track('watch');
     endPuzzle();
     if (reviewState) endReview(false);
     reportToken++; $('reportOverlay').hidden = true;
@@ -1277,6 +1284,7 @@
   }
 
   async function startPuzzle(day, e, practice) {
+    track(practice ? 'puzzle-practice' : 'puzzle-start');
     endPuzzle();
     if (reviewState) endReview(false);
     reportToken++; $('reportOverlay').hidden = true;
@@ -1369,6 +1377,7 @@
   }
 
   async function puzzleSolved(mate) {
+    track('puzzle-solved');
     const p = puzzle; p.over = true; phase = 'over'; updateButtons();
     const localMs = Date.now() - p.t0;
     clearInterval(puzzleTimer); puzzleTimer = null;
@@ -1524,6 +1533,7 @@
     };
   }
   function openFeedback(where) {
+    track('feedback-open');
     fbWhere = where;
     $('fbError').textContent = '';
     if (!$('fbName').value && profile.handle) $('fbName').value = profile.handle;

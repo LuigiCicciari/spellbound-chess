@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1.1.5">
+  <link rel="stylesheet" href="style.css?v=1.1.6">
 </head>
 <body>
   <div class="app" id="app">
@@ -327,21 +327,23 @@
   <div class="toast" id="toast" role="status" hidden></div>
   <div class="update-bar" id="updateBar" role="status" hidden>A new version of Spellbound Chess is ready. <button class="btn primary" id="updateBtn">Reload</button><button class="btn" id="updateLater" aria-label="Not now">Later</button></div>
 
-  <script src="config.js?v=1.1.5"></script>
-  <script src="rules.js?v=1.1.5"></script>
-  <script src="openings.js?v=1.1.5"></script>
-  <script src="engine.js?v=1.1.5"></script>
-  <script src="audio.js?v=1.1.5"></script>
-  <script src="render.js?v=1.1.5"></script>
-  <script src="ladder.js?v=1.1.5"></script>
-  <script src="sf.js?v=1.1.5"></script>
+  <script src="config.js?v=1.1.6"></script>
+  <script src="rules.js?v=1.1.6"></script>
+  <script src="openings.js?v=1.1.6"></script>
+  <script src="engine.js?v=1.1.6"></script>
+  <script src="audio.js?v=1.1.6"></script>
+  <script src="render.js?v=1.1.6"></script>
+  <script src="ladder.js?v=1.1.6"></script>
+  <script src="sf.js?v=1.1.6"></script>
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
   <script type="module">
     // Load the 3D board if the browser can; otherwise the flat board is used.
     try {
-      await Promise.race([import('./render3d.js?v=1.1.5'), new Promise((_, no) => setTimeout(() => no(new Error('the 3D files took too long to load')), 15000))]);
+      await Promise.race([import('./render3d.js?v=1.1.6'), new Promise((_, no) => setTimeout(() => no(new Error('the 3D files took too long to load')), 15000))]);
     } catch (e) { window.SB3DError = (e && e.message) || String(e); console.warn('Spellbound Chess: 3D board unavailable, using the flat board.', e); }
-    const s = document.createElement('script'); s.src = 'main.js?v=1.1.5'; document.body.appendChild(s);
+    const s = document.createElement('script'); s.src = 'main.js?v=1.1.6'; document.body.appendChild(s);
   </script>
+  <!-- Anonymous visit counter (GoatCounter: no cookies, no personal data, no consent banner needed). -->
+  <script data-goatcounter="https://spellbound.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>
