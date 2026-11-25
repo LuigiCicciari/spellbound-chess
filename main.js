@@ -56,7 +56,7 @@
   let worker = null, reqId = 0;
   const pending = new Map();
   try {
-    worker = new Worker('engine.worker.js?v=1.1.7');
+    worker = new Worker('engine.worker.js?v=1.1.8');
     worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
     worker.onerror = () => { worker = null; };
   } catch (e) { worker = null; }
@@ -1022,6 +1022,26 @@
     });
   }
   $('renameBtn').onclick = () => askName();
+  /* v1.1.8: delete my data (app-store requirement). Server first (games, puzzles, feedback, player row), then
+     everything this browser keeps, then a fresh start. A refusal or network error keeps everything as it was. */
+  async function deleteMyData() {
+    const named = !!profile.handle;
+    const ok = await confirmBox('Delete my data?', named
+      ? `This removes ${profile.handle} from the leaderboards and deletes your rating, saved games, puzzle results and any feedback you sent, on the server and on this device. It can't be undone. If you use the same recovery code on another device, that device starts over too.`
+      : "This deletes everything the game has saved on this device (settings, games, puzzle results) and any feedback you sent from it. It can't be undone.");
+    if (!ok) return;
+    const r = await window.SBLadder.deletePlayer(profile.player_id, profile.secret, store.get('spellbound.fbid', ''));
+    if (r.error) { toast(/not yours/.test(r.error) ? "This device's code doesn't match the leaderboard, so nothing was deleted. Email spellbound@cicciari.com and we'll remove it." : "Couldn't reach the server, so nothing was deleted. Try again in a moment."); return; }
+    try { Object.keys(localStorage).filter((k) => k.startsWith('spellbound.')).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
+    track('data-deleted');
+    location.replace(location.pathname + '?deleted=1');
+  }
+  $('deleteDataBtn').onclick = () => { $('nameCancel').click(); deleteMyData(); };
+  $('deleteFromHelp').onclick = () => { $('helpClose').click(); deleteMyData(); };
+  if (/[?&]deleted=1/.test(location.search)) {
+    try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
+    setTimeout(() => toast('Your data was deleted.'), 800);
+  }
   $('copyCode').onclick = async () => {
     try { await navigator.clipboard.writeText($('recoveryCode').value); $('recoveryNote').textContent = 'Copied. Keep it somewhere safe.'; }
     catch (e) { $('recoveryCode').select(); $('recoveryNote').textContent = 'Press Ctrl+C to copy.'; }

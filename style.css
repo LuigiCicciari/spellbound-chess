@@ -205,6 +205,8 @@ body.is3d .stage { padding: 8px 16px; gap: 12px; }
 .recovery { margin: 10px 0 4px; text-align: left; }
 .recovery summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
 .recovery .code-row { display: flex; gap: 6px; margin-top: 6px; }
+.btn.danger { border-color: #F28E2B; color: #F7B46B; margin-top: 4px; }   /* v1.1.8 delete my data */
+.btn.danger:hover { background: rgba(242,142,43,.12); }
 .recovery .code-row input { flex: 1; min-width: 0; font: 12px ui-monospace, monospace; }
 /* starting rating choice */
 .start-choice { border: 1px solid var(--line); border-radius: 8px; margin: 12px 0 0; padding: 8px 12px; }

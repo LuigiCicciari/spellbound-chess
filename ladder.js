@@ -227,6 +227,16 @@
     catch (e) { return false; }
   }
 
+  /* ---------- delete my data (v1.1.8) ---------- */
+  // Removes the player's games, puzzle results, feedback and the player row on the server (needs the secret).
+  async function deletePlayer(playerId, secret, clientId) {
+    if (!live()) return { ok: true };
+    try {
+      await rest('rpc/delete_player', { method: 'POST', body: JSON.stringify({ p_player_id: playerId, p_secret: secret || null, p_client_id: clientId || null }) });
+      return { ok: true };
+    } catch (e) { return { error: e.message || 'network error' }; }
+  }
+
   /* ---------- daily puzzle (v1.1) ---------- */
   // All writes go through the "puzzle" Edge Function: it checks the solution, and the database keeps the clock.
   // Each returns the server's JSON, or { error, transient } (transient = couldn't reach it; refused = not transient).
@@ -265,7 +275,7 @@
     } catch (e) { return { error: e.message || 'network error' }; }
   }
 
-  const api = { verify, compute, preview, board, levelBoard, save, rename, feedback, puzzleStart, puzzleFinish, puzzleBoard, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
+  const api = { verify, compute, preview, board, levelBoard, save, rename, feedback, deletePlayer, puzzleStart, puzzleFinish, puzzleBoard, START, STARTS, PROVISIONAL, get mode() { return mode; }, isLiveConfigured: live };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SBLadder = api;
 })(typeof window !== 'undefined' ? window : this);
